@@ -25,7 +25,7 @@ MODULE DG_initial
 
   TYPE (test_param)                                   :: p_testparam
   INTEGER, PARAMETER                                  :: i_ntstintparam  = 0
-  INTEGER, PARAMETER                                  :: i_ntstrealparam = 0
+  INTEGER, PARAMETER                                  :: i_ntstrealparam = 3
   INTEGER, PARAMETER                                  :: i_ntstcharparam = 0
   INTEGER, PARAMETER                                  :: i_ntstlogparam  = 0
 
@@ -52,7 +52,7 @@ MODULE DG_initial
      p_testparam%treal(2)%i_size    = 1
 
      ! parameter description
-     p_testparam%treal(3)%c_keyword = 'BATHY_PARAM_DEPTH'
+     p_testparam%treal(3)%c_keyword = 'BATHY_DEPTH'
      p_testparam%treal(3)%i_size    = 1
 !
 !     ! parameter description
@@ -255,7 +255,7 @@ MODULE DG_initial
       TANH(-p_testparam%treal(3)%p_value(1) * p_testparam%treal(2)%p_value(1)))       !Angular Velocity
     r_eta = p_testparam%treal(1)%p_value(1) * &
       SIN(2.0_GRID_SR*GRID_PI*(r_x-p_testparam%treal(2)%p_value(1)/4.0_GRID_SR)/p_testparam%treal(2)%p_value(1)) * &
-      COS(r_w*r_time)
+      COS(r_w*r_time) - p_testparam%treal(3)%p_value(1)
     r_u = 0.0_GRID_SR
     r_v = 0.0_GRID_SR
 
