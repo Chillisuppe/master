@@ -1,0 +1,78 @@
+#----------------------------------------------------------------
+# Rupturemodel: Test for Okada model (1985)
+#----------------------------------------------------------------
+# Comments:
+# In the Okada paper, X (Lon) = 2 m, Y (Lat) = 3 m, depth = 4 m, dip = 70°,
+# length = 3 m and width = 2 m. There are no values specified for the other
+# parameters. As a result, the other parameters have to be set to something.
+#
+# In this case, the slip is 2^(1/2) m, the rake 45°, the strike 90° and every
+# other parameter 0.
+# For this test, no times/seismic moments are needed.
+# The slip and rake are needed to calculate the displacement in the direction
+# of strike and dip with slip*cos(rake) or slip*sin(rake).
+# Here, both equations have to be equal to 1 to yield the results obtained by
+# Okada. This results in the given values for slip and rake.
+#
+# Usually, the subfaults datasets for StormFlash2d are given as subfault
+# centroids as the origin. The Okada model uplift is calculated with the origin
+# at the bottom center. As a result, the longitude, latitude and depth have to
+# be shifted. Additionally, the coordinate system has to be rotated by 90°
+# (strike). The coordinate system has the x axis along the length and the y axis
+# along the width. With a strike of 0°, the X axis is the north-south axis and
+# corresponds to the latitude.
+# In StormFlash2d, the X axis corresponds to the longitude.
+#
+# Fault geometry:
+#
+#  A: top edge, B: bottom edge, 1: origin
+#
+#   Okada model
+#
+#         ^     A **************** B  -
+#         |       *              *    |
+#         |       *              *    |
+#         |       *              *    |
+#         |       *              *    |
+#  X-dir  |       *             (1)   | length
+#         |       *              *    |
+#         |       *              *    |
+#         |       *              *    |
+#         |       *              *    |
+#         |     A **************** B  -
+#         |       |--------------|
+#         |            width
+#         +-------------------------->
+#                   Y-dir
+#
+#   StormFlash2d
+#
+#         ^     A **************** B  -
+#         |       *              *    |
+#         |       *              *    |
+#         |       *              *    |
+#         |       *              *    |
+#  Y-dir/ |       *     (1)      *    | length
+#  LAT    |       *              *    |
+#         |       *              *    |
+#         |       *              *    |
+#         |       *              *    |
+#         |     A **************** B  -
+#         |       |--------------|
+#         |            width
+#         +-------------------------->
+#                   X-dir/LON
+#
+#----------------------------------------------------------------
+# Collected and translated for StormFlash2d by:
+# Michel Baensch, Stefan Vater (stefan.vater@uni-hamburg.de)
+# Hamburg, 28.07.2016
+#----------------------------------------------------------------
+# Number of Faults
+NUM_FAULTS
+1
+#----------------------------------------------------------------
+# Now the FAULTS with the following parameters:
+# LAT        LON         depth(m)    slip(m)       rake(deg)    strike(deg)  dip(deg)   rupt_ini_t(s) r_tstart(s) r_tend(s)  Length(m)  Width(m)
+FAULT_PARAMETERS
+  3.0775517426023298e-6     0.0     3.0603073792140916     1.41421356237309504     45.0     90.0     70.0        0.0     0.0     0.0     3.0     2.0

@@ -1,0 +1,638 @@
+## GUI for StormFlash2d
+# Author: Nicole Beisiegel (adapted from E. W. Nugent's GUI for numa2dDG_AMR)
+
+from Tkinter import *
+
+import tkMessageBox
+import os
+
+#----------------------------------------
+# Setting paths to directories
+# Has to be altered by user
+#----------------------------------------
+PYDIR = os.getcwd()
+DATADIR = "~/Development/StormFlash2d/data"
+MAKEDIR = "~/Development/StormFlash2d/compile/Makefiles"
+
+#Help Textboxes
+def space_help():
+    tkMessageBox.showinfo("Space Help",
+                          "DG: Uses discontinuous Galerkin\n")
+
+def ti_help():
+    tkMessageBox.showinfo("TI Help",
+                          "RK22 info\n"
+                          "RK35 info")
+
+def lim_help():
+    tkMessageBox.showinfo("Limiter Help",
+                          "Attention!\n"
+                          "The L_2 Limiter is not wellbalanced.")
+def amr_help():
+    tkMessageBox.showinfo("AMR Help",
+                          "Put AMR help info here")
+
+def param_help():
+    tkMessageBox.showinfo("Param Help",
+                          "Put Param help info here")
+
+def print_makefile():
+    makefile_input = open("mymakefile","w")
+    makefile_input.write ("mytest: maincopy\n")
+    makefile_input.write ("@cp DG_cfl_simple.f90 DG_cfl.f90\n")
+    makefile_input.write ("@cp "+ lim_var.get()+" DG_limiter.F90\n")
+    makefile_input.write ("@cp "+ rs_var.get() +" DG_riemann_solver.F90\n")
+    makefile_input.write ("@cp DG_time_rungekutta.F90 DG_timestepping.F90\n")
+    makefile_input.write ("@cp "+ test_var.get()+" DG_initial.f90\n")
+    makefile_input.write ("@make executable\n")
+    makefile_input.write ("@make datacopy\n")
+    makefile_input.write ("@cp $(DATDIR)/"+space_var.get() +" .\n")
+    makefile_input.write ("@cp $(DATDIR)/"+triang_file_box.get()+" ./Triang.dat\n")
+    makefile_input.write ("@cp $(DATDIR)/myparameters.dat Parameters.dat\n")
+    makefile_input.close()
+    tkMessageBox.showinfo("Success",
+                          "The Makefile has been written.")
+#Writes the input file Parameters.dat
+def print_input():
+    stormflash_input = open("myparameters.dat", "w")
+    stormflash_input.write("#------------------------------------------------ \n")
+    stormflash_input.write("#Input file for batch mode input\n")
+    stormflash_input.write("#Created with StormFlash.py version 0.0 \n")
+    stormflash_input.write("#Author: Nicole Beisiegel \n")
+    stormflash_input.write("#------------------------------------------------ \n")
+    stormflash_input.write(
+                     "EXPERIMENT_NUMBER \n" +
+                     exp_number_box.get()+ "\n"
+                     "FINE_GRID_LEVEL \n" +
+                     fine_grid_box.get() +"\n"
+                     "COARSE_GRID_LEVEL \n" +
+                     coar_grid_box.get() +"\n"
+                     "TOLERANCE_OF_REFINEMENT \n" +
+                     tol_ref_box.get() +"\n"
+                     "TOLERANCE_OF_COARSENING \n" +
+                     tol_coar_box.get()+"\n"
+                     "WATERMARK_OF_REFINEMENT \n" +
+                     mark_ref_box.get() +"\n"
+                     "WATERMARK_OF_COARSENING\n" +
+                     mar_coar_box.get()+"\n"
+                     "TIMESTEP_LENGTH \n" +
+                     time_step_box.get()+"\n"
+                     "FILTER_PARAM_ALPHA \n" +
+                     filter_alph_box.get() +"\n"
+                     "LINEAR_EQUATIONS \n" +
+                     linear_var.get() +"\n"
+                     "TIMESTEPPING \n" +
+                     rs_var.get()+"\n"
+                     "VISCOSITY \n" +
+                     viscosity_box.get() +"\n"
+                     "BOTTOM_FRIC \n" +
+                     bfriction_box.get() +"\n"
+                     "WIND_FRIC \n" +
+                     wfriction_box.get() +"\n"
+                     "BEGINNING_TIMESTEP \n" +
+                     begin_time_box.get() +"\n"
+                     "FINISHING_TIMESTEP \n" +
+                     finish_time_box.get() +"\n"
+                     "ADAPT_REGION \n" +
+                     adapt_box.get()  +"\n"
+                     "NETCDF_FILE_PLOTTING \n" +
+                     netcdf_var.get() +"\n"
+                     "VTU_FILE_PLOTTING \n " +
+                     vtu_var.get() +"\n"
+                     "STEPS_BTW_PLOTS \n" +
+                     step_btw_plot_box.get()+"\n"
+                     "STEPS_BTW_SAVES \n" +
+                     step_btw_save_box.get() +"\n"
+                     "SAVE_FINISH_CONFIGURATION \n" +
+                     save_finish_box.get() +"\n"
+                     "TRIANG_FILE_NAME \n" + "Triang.dat \n"
+                     "NUM_SIGNATURE_FILES \n" + "1" +"\n"
+                     "SIGNATURE_FILE_NAME \n" +
+                     space_var.get() +"\n")
+    stormflash_input.write("#------------------------------------------------ \n")
+    stormflash_input.write("# End of File \n")
+    stormflash_input.write("#------------------------------------------------ \n")
+    stormflash_input.close()
+    tkMessageBox.showinfo("Success",
+                          "The output file has been written.")
+
+#----------------------------------------------------------------------------------
+# Testing the input for consistency
+#----------------------------------------------------------------------------------
+def test_input():
+# Repeater Box
+    if exp_number_box.get() == "":
+        tkMessageBox.showinfo("Error",
+                              "Please enter a value for "
+                              "Experiment Number")
+
+    elif save_finish_box.get()== "":
+        tkMessageBox.showinfo("Error",
+                              "Please enter a value for "
+                              "Save Finish Config.")
+
+    # Timestepping
+    elif ti_var.get() == "":
+        tkMessageBox.showinfo("Error",
+                              "Please choose a Timestepping "
+                              "Scheme.")
+
+    elif time_step_box.get()== "":
+        tkMessageBox.showinfo("Error",
+                              "Please enter a value for "
+                              "Initial Time Step.")
+
+    elif begin_time_box.get()== "":
+        tkMessageBox.showinfo("Error",
+                              "Please enter a value for "
+                              "Start Time.")
+
+    elif finish_time_box.get()== "":
+        tkMessageBox.showinfo("Error",
+                              "Please enter a value for "
+                              "Final Time.")
+
+    elif filter_alph_box.get()== "":
+        tkMessageBox.showinfo("Error",
+                              "Please enter a value for "
+                              "Timestepping Filter parameter.")
+
+
+# Adapt Box
+    elif fine_grid_box.get() == "":
+        tkMessageBox.showinfo("Error",
+                              "Please enter a value for "
+                              "Fine Grid Level.")
+
+    elif coar_grid_box.get()== "":
+        tkMessageBox.showinfo("Error",
+                              "Please enter a value for "
+                              "Coarse Grid Level.")
+
+    elif (coar_grid_box.get() > fine_grid_box.get()):
+        tkMessageBox.showinfo("Error",
+                              "Coarse grid level has to be "
+                              "smaller than fine grid level.")
+
+    elif tol_ref_box.get()== "":
+        tkMessageBox.showinfo("Error",
+                              "Please enter a value for "
+                              "Refinement Tolerance.")
+    elif (isinstance( tol_ref_box.get(), int ) == True):
+        tkMessageBox.showinfo("Error.",
+                              "Tolerance of Refinement has to be real.")
+
+    elif tol_coar_box.get()== "":
+        tkMessageBox.showinfo("Error",
+                              "Please enter a value for "
+                              "Coarsening Tolerance.")
+    elif (isinstance( tol_coar_box.get(), int ) == True):
+        tkMessageBox.showinfo("Error.",
+                              "Tolerance of Coarsening has to be real.")
+
+    elif (tol_coar_box.get() > tol_ref_box.get()):
+        tkMessageBox.showinfo("Error",
+                              "Coarse grid tolerance has to be "
+                              "smaller than fine grid tolerance.")
+
+    elif mark_ref_box.get()== "":
+        tkMessageBox.showinfo("Error",
+                              "Please enter a value for "
+                              "Mark for Refinement.")
+    elif (isinstance( mark_ref_box.get(), int ) == True):
+        tkMessageBox.showinfo("Error.",
+                              "Watermark for Refinement has to be real.")
+
+    elif mar_coar_box.get()== "":
+        tkMessageBox.showinfo("Error",
+                              "Please enter a value for "
+                              "Mark for Coarsening.")
+    elif (isinstance( mar_coar_box.get(), int ) == True):
+        tkMessageBox.showinfo("Error.",
+                              "Watermark for Coarsening has to be real.")
+
+    elif adapt_box.get()== "":
+        tkMessageBox.showinfo("Error",
+                              "Please enter a value for "
+                              "Extend of Refinement Region.")
+# OPTIONS for Testcases TEST
+    elif linear_var.get() == "":
+        tkMessageBox.showinfo("Error",
+                              "Please choose if a "
+                              "linearization is needed.")
+    elif test_var.get() == "":
+        tkMessageBox.showinfo("Error",
+                              "Please choose a Testcase.")
+# File Handling
+    elif triang_file_box.get()== "":
+        tkMessageBox.showinfo("Error",
+                              "Please enter a name for "
+                              "Triangle File.")
+# Physical Parameters
+    elif viscosity_box.get()== "":
+        tkMessageBox.showinfo("Error",
+                              "Please enter a value for "
+                              "Viscosity.")
+    elif (isinstance( viscosity_box.get(), int ) == True):
+        tkMessageBox.showinfo("Error.",
+                              "Viscosity has to be real.")
+
+    elif bfriction_box.get()== "":
+        tkMessageBox.showinfo("Error",
+                              "Please enter a value for "
+
+                              "Bottom Friction.")
+    elif (isinstance( bfriction_box.get(), int ) == True):
+        tkMessageBox.showinfo("Error.",
+                              "Bottom Friction has to be real.")
+
+    elif wfriction_box.get()== "":
+        tkMessageBox.showinfo("Error",
+                              "Please enter a value for "
+                              "Wind Friction.")
+    elif (isinstance( wfriction_box.get(), int ) == True):
+        tkMessageBox.showinfo("Error.",
+                              "Wind Friction has to be real.")
+
+# Space Discretization
+    elif space_var.get() == "":
+        tkMessageBox.showinfo("Error",
+                              "Please choose a Spatial "
+                              "Discretization.")
+
+#Output Box
+    elif step_btw_plot_box.get()== "":
+        tkMessageBox.showinfo("Error",
+                              "Please enter a value for "
+                              "Steps between Plots.")
+
+    elif step_btw_save_box.get()== "":
+        tkMessageBox.showinfo("Error",
+                              "Please enter a value for "
+                              "Steps between Saves.")
+
+# Riemann solver
+    elif rs_var.get() == "":
+        tkMessageBox.showinfo("Error",
+                              "Please choose a Riemann "
+                              "solver.")
+
+# Limiter
+    elif lim_var.get() == "":
+        tkMessageBox.showinfo("Error",
+                              "Please choose a limiter "
+                              "or select none.")
+    else:
+        tkMessageBox.showinfo("Success",
+                              "Your input is good to go. You "
+                              "can now click Write Input and Write Makefile.")
+
+#------------------------------------------------------------------------
+# Initialize main frame
+#------------------------------------------------------------------------
+root = Tk()             #Establish the main window and give
+root.title("STORMFLASH 2D")   #it the name "STORMFLASH 2D"
+
+#------------------------------------------------------------------------
+# Frame for physical parameters
+#------------------------------------------------------------------------
+param_frame = LabelFrame(root, text="OPTIONS for Physical Parameters")
+param_frame.grid(column=7, row=10, rowspan=2 , sticky=W)
+
+#param_var = StringVar()
+
+viscosity_box = Entry(param_frame)
+viscosity_label = Label(param_frame, text="Viscosity:")
+viscosity_box.grid(row=0,column=1)
+viscosity_label.grid(row=0, column=0, sticky=E)
+
+bfriction_box = Entry(param_frame)
+bfriction_label = Label(param_frame, text="Bottom Friction:")
+bfriction_box.grid(row=1,column=1)
+bfriction_label.grid(row=1, column=0, sticky=E)
+
+wfriction_box = Entry(param_frame)
+wfriction_label = Label(param_frame, text="Wind Friction:")
+wfriction_box.grid(row=2,column=1)
+wfriction_label.grid(row=2, column=0, sticky=E)
+
+param_help_btn = Button(param_frame, text="Param Help",
+                        command=param_help)
+param_help_btn.grid(row=3, column=1, sticky=W)
+
+#-----------------------------------------------------------------------
+#create a frame for the space radio buttons and place it
+#-----------------------------------------------------------------------
+
+space_frame = LabelFrame(root, text="OPTIONS for Space Discretization")
+space_frame.grid(column=1, row=21, rowspan=3, sticky=W)
+
+space_var = StringVar()
+space_var.set("dg_linear.ftf")  # initializing the choice
+
+space_radio_0 = Radiobutton(space_frame, text="DG, linear",
+                            variable=space_var, value="dg_linear.ftf")
+space_radio_1 = Radiobutton(space_frame, text="DG, quadratic",
+                            variable=space_var, value="dg_quad.ftf")
+
+space_help_btn = Button(space_frame, text="Discretization Help",
+                     command=space_help)
+
+space_radio_0.grid(row=0, column=0, sticky=W)
+space_radio_1.grid(row=1, column=0, sticky=W)
+
+space_help_btn.grid(row=2, column=0, sticky=W, rowspan=2)
+
+#-------------------------------------------------------------------
+# File Handling
+#-------------------------------------------------------------------
+file_frame = LabelFrame(root, text="OPTIONS for File Handling")
+file_frame.grid(column=1, columnspan=2, row=10, rowspan=10,
+                sticky=W, padx=5, pady=5)
+
+triang_file_box = Entry(file_frame)
+triang_file_label = Label(file_frame, text="Triang File:")
+triang_file_box.grid(row=3, column=1)
+triang_file_label.grid(row=3, column=0, sticky=E)
+
+#file_default_btn set everything to default
+#-------------------------------------------------------------------
+# Create and place frame for output options
+#-------------------------------------------------------------------
+output_frame = LabelFrame(root, text="OPTIONS for Output Routines")
+output_frame.grid(column=4, columnspan=2, row=13, rowspan=10,
+                  sticky=W, padx=5, pady=5)
+
+netcdf_var = StringVar()
+vtu_var    = StringVar()
+
+#output_radio_0 = Radiobutton(output_frame, text="NetCDF",
+                            #variable=netcdf_var, value="\'1\'")
+#output_radio_1 = Radiobutton(output_frame, text="VTU",
+                            #variable=vtu_var, value="\'1\'")
+output_radio_0 = Checkbutton(output_frame, text="NetCDF",
+                            variable=netcdf_var)
+output_radio_1 = Checkbutton(output_frame, text="VTU",
+                            variable=vtu_var)
+output_radio_0.grid(row=0, column=0, sticky=W)
+output_radio_1.grid(row=1, column=0, sticky=W)
+
+step_btw_plot_box = Entry(output_frame)
+step_btw_plot_label = Label(output_frame, text="Steps between plots:")
+step_btw_plot_box.grid(row=3, column=1)
+step_btw_plot_label.grid(row=3, column=0, sticky=E)
+
+step_btw_save_box = Entry(output_frame)
+step_btw_save_label= Label(output_frame, text="Steps between saves:")
+step_btw_save_box.grid(row=4, column=1)
+step_btw_save_label.grid(row=4, column=0, sticky=E)
+
+#-------------------------------------------------------------------------
+#Create and place the frame for the AMR options
+#-------------------------------------------------------------------------
+amr_frame = LabelFrame(root, text="OPTIONS for Adaptive Mesh Refinement")
+amr_frame.grid(column=4, columnspan=2, row=1, rowspan=6,
+               sticky=W, padx=5, pady=5)
+
+fine_grid_box = Entry(amr_frame)
+fine_grid_label = Label(amr_frame, text="Fine Grid Level:")
+fine_grid_box.grid(row=0, column=1)
+fine_grid_label.grid(row=0, column=0, sticky=E)
+
+coar_grid_box = Entry(amr_frame)
+coar_grid_label = Label(amr_frame, text="Coarse Grid Level:")
+coar_grid_box.grid(row=1, column=1)
+coar_grid_label.grid(row=1, column=0, sticky=E)
+
+tol_ref_box = Entry(amr_frame)
+tol_ref_label=Label(amr_frame, text="Refinement Tolerance:")
+tol_ref_box.grid(row=2, column=1)
+tol_ref_label.grid(row=2, column=0, sticky=E)
+
+tol_coar_box = Entry(amr_frame)
+tol_coar_label= Label(amr_frame, text="Coarsening Tolerance:")
+tol_coar_box.grid(row=3, column=1)
+tol_coar_label.grid(row=3, column=0, sticky=E)
+
+adapt_box= Entry(amr_frame)
+adapt_label= Label(amr_frame, text="Size of Adaptation Region:")
+adapt_box.grid(row=4, column=1)
+adapt_label.grid(row=4, column=0, sticky=E)
+
+mark_ref_box = Entry(amr_frame)
+mark_ref_label=Label(amr_frame, text="Watermark for Refinement:")
+mark_ref_box.grid(row=5, column=1)
+mark_ref_label.grid(row=5, column=0, sticky=E)
+
+mar_coar_box = Entry(amr_frame)
+mar_coar_label=Label(amr_frame, text="Watermark for Coarsening:")
+mar_coar_box.grid(row=6, column=1)
+mar_coar_label.grid(row=6, column=0, sticky=E)
+
+
+amr_help_btn= Button(amr_frame, text="AMR Help",
+                     command=amr_help)
+amr_help_btn.grid(column=1, row=8, rowspan=2)
+
+#--------------------------------------------------------------------------
+# Limiting Options
+#--------------------------------------------------------------------------
+limiter_frame =LabelFrame(root, text="OPTIONS for Limiting")
+limiter_frame.grid(column=10, columnspan=2, row=12, rowspan=10,
+               sticky=W, padx=5, pady=5)
+lim_label = Label(limiter_frame, text="Please, choose a limiter.")
+lim_var = StringVar()
+
+lim_radio_1 = Radiobutton(limiter_frame, text="None",
+                           value="DG_limiter_none.F90",
+                           variable=lim_var)
+
+lim_radio_2 = Radiobutton(limiter_frame, text="L_2 Limiter",
+                           value="DG_limiter_giraldo.F90",
+                           variable=lim_var)
+
+lim_radio_3 = Radiobutton(limiter_frame, text="Cockburn & Shu",
+                           value="DG_limiter_shu.F90",
+                           variable=lim_var)
+
+lim_radio_4 = Radiobutton(limiter_frame, text="Xing & Shu",
+                           value="DG_limiter_xingshu.F90",
+                           variable=lim_var)
+
+lim_label.grid(column=0, row=1, sticky=E)
+
+lim_radio_1.grid(column=0, row=2, sticky=W)
+lim_radio_2.grid(column=0, row=3, sticky=W)
+lim_radio_3.grid(column=0, row=4, sticky=W)
+lim_radio_4.grid(column=0, row=5, sticky=W)
+
+lim_help_btn= Button(limiter_frame, text="Limiter Help",
+                     command=lim_help)
+lim_help_btn.grid(column=1, row=2, rowspan=2)
+
+#------------------------------------------------------------------------
+#Riemann Solver Options
+#------------------------------------------------------------------------
+riemann_frame =LabelFrame(root, text="OPTIONS for Riemann Solvers")
+riemann_frame.grid(column=7, columnspan=2, row=21, rowspan=10,sticky=W)
+rs_label = Label(riemann_frame, text="Please, choose a Riemann solver.")
+rs_var = StringVar()
+rs_var.set("DG_RS_rusanov.F90")  # initializing the choice
+
+rs_radio_1 = Radiobutton(riemann_frame, text="Rusanov",
+                         value="DG_RS_rusanov.F90",
+                         variable=rs_var)
+
+rs_radio_2 = Radiobutton(riemann_frame, text="Roe",
+                         value="DG_RS_roe.F90",
+                         variable=rs_var)
+
+rs_radio_3 = Radiobutton(riemann_frame, text="HLL",
+                         value="DG_RS_hll.F90",
+                         variable=rs_var)
+
+rs_radio_4 = Radiobutton(riemann_frame, text="HLLC",
+                         value="DG_RS_hllc.F90",
+                         variable=rs_var)
+rs_radio_5 = Radiobutton(riemann_frame, text="Exact",
+                         value="DG_RS_exact.F90",
+                         variable=rs_var)
+
+rs_label.grid(column=0, row=1, sticky=E)
+
+rs_radio_1.grid(column=0, row=2, sticky=W)
+rs_radio_2.grid(column=0, row=3, sticky=W)
+rs_radio_3.grid(column=0, row=4, sticky=W)
+rs_radio_4.grid(column=0, row=5, sticky=W)
+rs_radio_5.grid(column=0, row=6, sticky=W)
+
+#--------------------------------------------------------------------
+#--------------------------------------------------------------------
+#Timestepping options
+#--------------------------------------------------------------------
+ti_frame = LabelFrame(root, text="OPTIONS for Timestepping schemes")
+ti_frame.grid(column=1, row = 1, rowspan=8, sticky=W,
+              columnspan = 2,)
+
+ti_label = Label(ti_frame, text="Please, choose.")
+ti_label.grid(row=0, column=0, sticky=E)
+
+ti_var = StringVar()
+ti_var.set("\'rk22\'")  # initializing the choice
+
+ti_radio_0 = Radiobutton(ti_frame, text="Euler",
+                         variable=ti_var, value="\'euler\'")
+
+ti_radio_1 = Radiobutton(ti_frame, text="RK22",
+                         variable=ti_var, value="\'rk22\'")
+
+ti_radio_2 = Radiobutton(ti_frame, text="RK33",
+                         variable=ti_var, value="\'rk33\'")
+
+ti_radio_3 = Radiobutton(ti_frame, text="RK35",
+                         variable=ti_var, value="\'rk35\'")
+
+
+time_step_box = Entry(ti_frame)
+time_step_label = Label(ti_frame, text="Timestep:")
+time_step_box.grid(row=7, column=1)
+time_step_label.grid(row=7, column=0, sticky=E)
+
+begin_time_box = Entry(ti_frame)
+begin_time_label = Label(ti_frame, text="Start Time:")
+begin_time_box.grid(row=8, column=1)
+begin_time_label.grid(row=8, column=0, sticky=E)
+
+finish_time_box = Entry(ti_frame)
+finish_time_label = Label(ti_frame, text="Finishing Time:")
+finish_time_box.grid(row=9, column=1)
+finish_time_label.grid(row=9, column=0, sticky=E)
+
+filter_alph_box = Entry(ti_frame)
+filter_alph_label = Label(ti_frame, text="Filter Parameter:")
+filter_alph_box.grid(row=10, column=1)
+filter_alph_label.grid(row=10, column=0, sticky=E)
+
+ti_radio_0.grid(row=1, column=0, sticky=W)
+ti_radio_1.grid(row=2, column=0, sticky=W)
+ti_radio_2.grid(row=3, column=0, sticky=W)
+ti_radio_3.grid(row=4, column=0, sticky=W)
+
+#---------------------------------------------------------
+#
+#---------------------------------------------------------
+exp_frame = LabelFrame(root, text="OPTIONS for REPEATING EXPERIMENTS")
+exp_frame.grid(column=4, row=10, rowspan=2, columnspan=2, sticky=W)
+
+exp_number_box = Entry(exp_frame)
+exp_number_label = Label(exp_frame, text="Experiment Number:")
+exp_number_box.grid(row=0, column=1)
+exp_number_label.grid(row=0, column=0, sticky=E)
+
+save_finish_box = Entry(exp_frame)
+save_finish_label = Label(exp_frame, text="Saves finish:")
+save_finish_box.grid(row=1, column=1)
+save_finish_label.grid(row=1, column=0, sticky=E)
+
+#------------------------------------------------------------
+# Testcases
+#------------------------------------------------------------
+test_frame=LabelFrame(root, text="OPTIONS for TESTCASES")
+test_frame.grid(column=7, row=1, rowspan=6, columnspan=2, sticky=W)
+
+test_var = StringVar()
+test_radio_0 = Radiobutton(test_frame, text="Wet Shock",
+                           variable=test_var, value="DG_shocktest.F90")
+test_radio_1 = Radiobutton(test_frame, text="Wet/Dry Shock",
+                           variable=test_var, value="DG_shock_wet.F90")
+test_radio_2 = Radiobutton(test_frame, text="Linear Standing wave",
+                           variable=test_var, value="DG_lsw.F90")
+test_radio_3 = Radiobutton(test_frame, text="Sloping Beach",
+                           variable=test_var, value="DG_beachtest.F90")
+test_radio_4 = Radiobutton(test_frame, text="Wet Wellbalanced",
+                           variable=test_var, value="DG_wellbalanced.F90")
+test_radio_5 = Radiobutton(test_frame, text="Wet/Dry Wellbalanced",
+                           variable=test_var, value="DG_wellbalanced2.F90")
+
+test_radio_0.grid(row=1, column=0, sticky=W)
+test_radio_1.grid(row=2, column=0, sticky=W)
+test_radio_2.grid(row=3, column=0, sticky=W)
+test_radio_3.grid(row=4, column=0, sticky=W)
+test_radio_4.grid(row=5, column=0, sticky=W)
+test_radio_5.grid(row=6, column=0, sticky=W)
+
+linear_var = StringVar()
+lin_radio_0 = Radiobutton(test_frame, text="Linearize",
+                         variable=linear_var, value="\'1\'")
+lin_radio_0.grid(row=0, column=0, sticky=W)
+
+#--------------------------------------------------
+# Insert Print and Test Buttons
+#--------------------------------------------------
+test_input_button = Button(root, text="Test Input", command=test_input)
+writefile_button  = Button(root, text="Write Input", command=print_input)
+writemake_button  = Button(root, text="Write Makefile", command=print_makefile)
+
+test_input_button.grid(row=1, column=10, sticky=W)
+writefile_button.grid(row=2, column=10, sticky=W)
+writemake_button.grid(row=3, column=10, sticky=W)
+
+#-------------------------------------------------
+# Run the main program
+#-------------------------------------------------
+
+root.mainloop()
+
+#-----------------------------------------------------
+# Still TO DO
+#-----------------------------------------------------
+# Adding TAM parameters
+#visc_ah0_box.grid(row=6, column=1)
+#visc_ah0_label.grid(row=6, column=0, sticky=E)#
+
+#visc_cd_box.grid(row=7, column=1)
+#visc_cd_label.grid(row=7, column=0, sticky=E)
+
+#visc_dcr_box.grid(row=8, column=1)
+#visc_dcr_label.grid(row=8, column=0, sticky=E)
+

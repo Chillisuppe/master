@@ -1,0 +1,21 @@
+/**
+
+@mainpage StormFlash2d: An Adaptive Discontinuous Galerkin Method for Geophysical Problems
+
+StormFlash2d is a 2D high-order discontinuous Galerkin (DG) method on an adaptive grid (created and manipulated with amatos2d) with capabilities of solving 2D hyperbolic conservation laws (shallow water equations, Euler equations, ...) using an explicit time stepping scheme.
+
+It has been successfully applied to study tsunami wave propagation as well as storm surge flooding [references here]. A comprehensive test suite is provided with the code and more information can be found here [..]
+
+@section secWhySF2D Why StormFlash2d?
+
+Is this solver suited for your problem?
+
+
+
+@section secMaths A Little Bit of The Maths Behind
+[...]
+
+@section secReading Further Reading
+For further references the reader of this manual is referred to the following [..]
+
+**/

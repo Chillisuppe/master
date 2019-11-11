@@ -1,0 +1,4 @@
+cd ../../src/flash/
+emacs ADV_fvm.F90 & emacs ADV_update_nicole.F90 & emacs FVM_initial_channel_DG.f90 &
+cd ../../data/
+emacs dg_quad.ftf & emacs dg_linear.ftf & emacs Parameters_channel_refine_DG.dat & emacs Parameters_channel_refine_DG_quad.dat &

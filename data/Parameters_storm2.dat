@@ -1,0 +1,141 @@
+#-----------------------------------------------------------
+# Input file for batch mode input
+# input is controlled via keywords
+#
+# j. behrens 12/96
+#-----------------------------------------------------------
+# the experiment no. (0 for a new experiment)     [integer]
+EXPERIMENT_NUMBER
+0
+# desired maximum level of refinements            [integer]
+FINE_GRID_LEVEL
+11
+# minimum level of refinements                    [integer]
+COARSE_GRID_LEVEL
+11
+# tolerance for refinement                        [real]
+TOLERANCE_OF_REFINEMENT
+0.9
+# tolerance for coarsening                        [real]
+TOLERANCE_OF_COARSENING
+0.0
+# watermark for refinement                        [real]
+WATERMARK_OF_REFINEMENT
+0.001
+# watermark for coarsening                        [real]
+WATERMARK_OF_COARSENING
+0.001
+# timestep length                                 [real]
+TIMESTEP_LENGTH
+10.0
+# timestepping scheme (euler, rk22, rk33, rk34, rk35)  [character]
+TIMESTEPPING
+rk22
+# first timestep                                  [integer]
+BEGINNING_TIMESTEP
+1
+# last timestep                                   [integer]
+FINISHING_TIMESTEP
+14500
+# size of cell neighborhood to be additionally refined [integer]
+ADAPT_REGION
+0
+# plot in NetCDF style to file (no plot = 0)      [integer]
+NETCDF_FILE_PLOTTING
+0
+# equidist. subtriang pts per edge (default: 2)   [integer]
+SUBTRIANG_PTS
+2
+# plot in vtu style for paraview (no plot = 0)    [integer]
+VTU_FILE_PLOTTING
+1
+# plot analytic solution to file (no plot = 0)    [integer]
+ANASOL_PLOTTING
+0
+# timesteps between plots                         [integer]
+STEPS_BTW_PLOTS
+500
+# timesteps between saves                         [integer]
+STEPS_BTW_SAVES
+5000000
+# diagnostic (on = 1, off = 0)                    [integer]
+DIAGNOSTICS
+1
+# Steps between diagnostics                       [integer]
+STEPS_BTW_DIAG
+10
+# save last timestep for next experiment (no = 0) [integer]
+SAVE_FINISH_CONFIGURATION
+0
+# file defining the initial triangulation         [character]
+TRIANG_FILE_NAME
+Triang.dat
+# number of signature files provided              [integer]
+NUM_SIGNATURE_FILES
+1
+# signature file name                             [character]
+SIGNATURE_FILE_NAME
+dg_linear.ftf
+#-----------------------------------------------------------
+# equation specific parameters
+#-----------------------------------------------------------
+# viscosity                                       [real]
+VISCOSITY
+0.0
+# bottom friction                                 [real]
+BOTTOM_FRIC
+0.0
+# wind friction                                   [real]
+WIND_FRIC
+2.0
+# bathymetric depth (uniform) of the basin        [real]
+BATHY_PARAM_DEPTH
+3000.0
+# cut off tolerance for wetting and drying        [real]
+WETDRY_TOL
+0.001
+#-----------------------------------------------------------
+# test specific parameters
+#-----------------------------------------------------------
+# description [real]
+ALPHA1
+0.027
+# description [real]
+ALPHA2
+0.042
+# description [real]
+PRESSURE_CENT
+950.0
+# description [real]
+PRESSURE_N
+1005.0
+# description [real]
+PRESSURE_A
+1000.0
+# description [real]
+PARAM_A
+23.0
+# description [real]
+PARAM_B
+1.5
+# description [real]
+DENSITY_AIR
+1.15
+# description [real]
+START_POSITION
+0.0  0.0
+# description [real]
+FINAL_POSITION
+283673.873962  459487.903248
+# description [real]
+START_TIME
+0.0
+# description [real]
+FINAL_TIME
+108000.0
+# description [real]
+RAMP_TIME
+14400.0
+#-----------------------------------------------------------
+# END OF FILE
+#-----------------------------------------------------------

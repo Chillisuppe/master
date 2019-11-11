@@ -1,0 +1,48 @@
+!-------------------------------------------------------------------
+! this file defines as an example a simple computational domain
+! i.e. the unit square, moved by the vector (-0.5,-0.5)
+!
+! j. behrens, 11/97
+!
+! this describes the conventions for the data format:
+! COMMENTS:
+!   each line beginning with a '!' or a '#' is a comment line
+! KEYWORDS
+!   there are several keywords which have to start in the first
+!   collumn and have to be written in CAPITAL LETTERS. the line
+!   immediately following the keyword line holds the required
+!   information and must not contain a comment!
+! DATA
+!   has to be written according to the information given by the
+!   keywords. ok, look at the example :-)
+!-------------------------------------------------------------------
+# define the number of dimensions: two lines:
+# 1. keyword line, 2. single integer
+NUMBER_OF_DIMENSIONS
+2
+# ok, we made this one.
+# now define the number of polygons for the domain: two lines:
+# 1. keyword line, 2. single integer
+NUMBER_OF_POLYGONS
+1
+# this is going to be a really complicated domain...
+# now we deliver the number of vertices of the polygonal line: two lines:
+# 1. keyword line, 2. single integer
+NUMBER_OF_VERTICES
+4
+# guess, this is going to be a square!
+# finally we give the coordinate data:
+#   NUMBER_OF_DIMENSIONS * NUMBER_OF_VERTICES + 1 lines:
+# 1. keyword line, after that data lines (only one collumn)
+VERTEX_DATA
+-10.0
+ 50.0
+ 14.0
+ 50.0
+ 14.0
+ 62.0
+-10.0
+ 62.0
+!-------------------------------------------------------------------
+! end of file
+!-------------------------------------------------------------------

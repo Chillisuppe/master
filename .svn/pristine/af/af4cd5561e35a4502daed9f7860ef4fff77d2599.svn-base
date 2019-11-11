@@ -1,0 +1,126 @@
+#-------------------------------------------------------------------
+# This file contains the definition of an initial triangulation
+# of a channel: x \in [0, 12000] and y \in [0, 600] with reflecting
+# boundary conditons on the outer boundaries but a tidal boundary
+# condition on (x=0,y). (The tidal condition has to be given as
+# time dependant Dirichlet condition.)
+#
+# j. behrens, 04/2006
+#-------------------------------------------------------------------
+# first give the global defining parameters
+!--- dimension of the grid coordinates
+GRID_DIMENSION
+2
+!--- number of vertices in each element (3: triangular, 4: quadrilateral)
+ELEMENT_VERTICES
+3
+!--- total number of nodes
+NUMBER_OF_NODES
+42
+!--- total number of edges
+NUMBER_OF_EDGES
+81
+!--- total number of elements
+NUMBER_OF_ELEMENTS
+40
+# now define the boundary condition flags
+DEF_INNERITEM
+0
+DEF_DIRICHLETBOUNDARY
+-1
+DEF_NEUMANNBOUNDARY
+-2
+DEF_REFLECTING
+-3
+DEF_TRANSPARENT
+-4
+DEF_TIDAL
+-5
+# now define the nodes (short format)
+NODES_DESCRIPTION
+  1      0.0     0.0
+  2    600.0   600.0
+  3      0.0   600.0
+  4    600.0     0.0
+  5   1200.0     0.0
+  6   1200.0   600.0
+  7   1800.0   600.0
+  8   1800.0     0.0
+  9   2400.0     0.0
+ 10   2400.0   600.0
+ 11   3000.0   600.0
+ 12   3000.0     0.0
+ 14   3600.0     0.0
+ 13   3600.0   600.0
+ 16   4200.0   600.0
+ 15   4200.0     0.0
+ 18   4800.0     0.0
+ 17   4800.0   600.0
+ 20   5400.0   600.0
+ 19   5400.0     0.0
+ 21   6000.0   600.0
+ 22   6000.0     0.0
+ 24   6600.0   600.0
+ 23   6600.0     0.0
+ 26   7200.0     0.0
+ 25   7200.0   600.0
+ 28   7800.0   600.0
+ 27   7800.0     0.0
+ 30   8400.0     0.0
+ 29   8400.0   600.0
+ 32   9000.0   600.0
+ 31   9000.0     0.0
+ 34   9600.0     0.0
+ 33   9600.0   600.0
+ 36  10200.00  600.0
+ 35  10200.00    0.0
+ 38  10800.00    0.0
+ 37  10800.00  600.0
+ 40  11400.00  600.0
+ 39  11400.00    0.0
+ 42  12000.00    0.0
+ 41  12000.00  600.0
+ELEMENTS_DESCRIPTION
+  1   1  2  3    3   -3 -5  0
+  2   2  1  4    3   -3  0  0
+  3   5  2  4    3    0 -3  0
+  4   2  5  6    3    0 -3  0
+  5   5  7  6    3   -3  0  0
+  6   7  5  8    3   -3  0  0
+  7   9  7  8    3    0 -3  0
+  8   7  9 10    3    0 -3  0
+  9   9 11 10    3   -3  0  0
+ 10  11  9 12    3   -3  0  0
+ 11  11 14 12    3   -3  0  0 
+ 12  14 11 13    3   -3  0  0
+ 13  14 16 13    3   -3  0  0
+ 14  16 14 15    3   -3  0  0
+ 15  16 18 15    3   -3  0  0
+ 16  18 16 17    3   -3  0  0
+ 17  18 20 17    3   -3  0  0
+ 18  20 18 19    3   -3  0  0
+ 19  20 22 19    3   -3  0  0
+ 20  22 20 21    3   -3  0  0
+ 21  22 24 21    3   -3  0  0
+ 22  24 22 23    3   -3  0  0
+ 23  24 26 23    3   -3  0  0
+ 24  26 24 25    3   -3  0  0
+ 25  26 28 25    3   -3  0  0
+ 26  28 26 27    3   -3  0  0
+ 27  28 30 27    3   -3  0  0
+ 28  30 28 29    3   -3  0  0
+ 29  30 32 29    3   -3  0  0
+ 30  32 30 31    3   -3  0  0
+ 31  32 34 31    3   -3  0  0
+ 32  34 32 33    3   -3  0  0
+ 33  34 36 33    3   -3  0  0
+ 34  36 34 35    3   -3  0  0
+ 35  36 38 35    3   -3  0  0
+ 36  38 36 37    3   -3  0  0    
+ 37  38 40 37    3   -3  0  0
+ 38  40 38 39    3   -3  0  0
+ 39  40 42 39    3   -3  0  0
+ 40  42 40 41    3   -3 -3  0
+#-------------------------------------------------------------------
+# end of file
+#-------------------------------------------------------------------

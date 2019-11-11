@@ -1,0 +1,241 @@
+!*******************************************************************************
+!
+!> @file  DG_time_rungekutta.F90
+!> @brief contains module DG_timestepping
+!
+!*******************************************************************************
+!
+! VERSION(s):
+! 1. version            nicole beisiegel        12/2011
+!
+!*******************************************************************************
+! MODULE DESCRIPTION:
+!> @brief provides timestepping routine for DG method
+!>
+!> explicit SSP Runge Kutta methods
+!
+MODULE DG_timestepping
+
+  USE GRID_api
+  USE DG_limiter
+  USE DG_flux
+  USE DG_equation
+  USE FLASH_parameters
+
+  PRIVATE
+  PUBLIC   :: timestepping, read_coefficients
+
+  CONTAINS
+
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE timestepping]:
+!> @brief Provides timestepping routine for DG method: - Explicit SSP Runge Kutta methods
+!
+!> @param[in]     p_ghand           grid handling data structure
+!> @param         r_Q_curr          discrete solution vector from old time level
+!> @param         r_Q_next          computed discrete solution vector from new time level
+!> @param         r_S_curr          discrete fields used in source terms
+!> @param         r_time            current model time
+!> @param         r_dt              current time step length
+!> @param         i_stages          number of stages used in Runge-Kutta time stepping
+!> @param         r_coeff           coefficient matrix of Runge-Kutta time stepping
+!> @param         i_numelmt         total number of elements
+!> @param         i_numedge         total number of edges
+!> @param         i_faceunknowns    number of DOFs per element
+!> @param         i_degree          polynomial degree of element
+!> @param         r_coonod          coordinates for each grid node
+!> @param         r_coodof          coordinates for each dof in the grid
+!> @param         r_metrics_inv     metric terms for each element; DIMENSION(2,2,i_numelmt)
+!> @param         r_Dxi             derivative matrix in \f$\xi\f$ direction (from signature file)
+!> @param         r_Deta            derivative matrix in \f$\eta\f$ direction (from signature file)
+!> @param[in]     r_evander         Vandermonde matrix
+!> @param[in]     r_einvvander      inverse Vandermonde matrix
+!> @param         r_epsi            basis function evaluations at element quadrature points
+!> @param         r_gpsi            basis function evaluations at edge quadrature points
+!> @param         r_eMinvpsi
+!> @param         r_eMinvdpsidxi
+!> @param         r_eMinvdpsideta
+!> @param         r_gMinvpsi
+!> @param         i_equadpts        number of quadrature points per element
+!> @param         i_gquadpts        number of quadrature points per edge
+!> @param         r_eqwei           weights for the quadrature rule corresponding to the element quadrature points
+!> @param         r_gqwei           weights for the quadrature rule corresponding to the edge quadrature points
+!> @param         r_element_vol     volume of each element in grid
+!> @param         r_edgelength      length of each edge in grid
+!> @param         r_normals
+!> @param         i_elementedges    edge indices of the edges of each element; DIMENSION(3,i_numelmt)
+!> @param         i_elementnodes    node indices of each element; DIMENSION(3, i_numelmt)
+!> @param         i_elementdofs     DOF indices corresponding to each element; DIMENSION(i_faceunknowns, i_numelmt)
+!> @param         i_edgenodes       global node indices for each edge; DIMENSION(2,i_numedge)
+!> @param         i_edgeinfo        edge-element relation for each edge: local edge index and global element index for adjacent elements; DIMENSION(4,i_numedge)
+!> @param         i_edgeboundary    boundary flags for all edges
+!
+  SUBROUTINE timestepping(p_ghand, r_Q_curr, r_Q_next, r_S_curr, &
+                          r_time, r_dt, i_stages, r_coeff, i_numelmt, i_numedge, &
+                          i_faceunknowns, i_degree, r_coonod, r_coodof, r_metrics_inv, &
+                          r_Dxi, r_Deta, r_evander, r_einvvander, r_epsi, r_gpsi, &
+                          r_eMinvpsi, r_eMinvdpsidxi, r_eMinvdpsideta, r_gMinvpsi, &
+                          i_equadpts, i_gquadpts, r_eqwei, r_gqwei, r_element_vol, &
+                          r_edgelength, r_normals, i_elementedges, i_elementnodes, &
+                          i_elementdofs, i_edgenodes, i_edgeinfo, i_edgeboundary)
+
+    IMPLICIT NONE
+
+    TYPE (grid_handle), INTENT(in)                          :: p_ghand
+    REAL (KIND = GRID_SR), DIMENSION(:,:), INTENT(in)       :: r_Q_curr
+    REAL (KIND = GRID_SR), DIMENSION(:,:), INTENT(out)      :: r_Q_next
+    REAL (KIND = GRID_SR), DIMENSION(:,:,:), INTENT(in)     :: r_metrics_inv
+    REAL (KIND = GRID_SR), DIMENSION(:,:), INTENT(in)       :: r_S_curr, r_coonod, r_coodof, &
+                                                               r_normals, &
+                                                               r_epsi, r_gpsi, r_eMinvpsi, &
+                                                               r_gMinvpsi, r_eMinvdpsidxi, &
+                                                               r_eMinvdpsideta, r_Dxi, r_Deta, &
+                                                               r_evander, r_einvvander
+    REAL (KIND = GRID_SR), DIMENSION(:), INTENT(in)         :: r_eqwei, r_gqwei, r_element_vol, &
+                                                               r_edgelength
+    REAL (KIND = GRID_SR), DIMENSION(:,:), INTENT(in)       :: r_coeff
+    REAL (KIND = GRID_SR), INTENT(in)                       :: r_time, r_dt
+    INTEGER (KIND = GRID_SI), INTENT(in)                    :: i_stages, i_numedge, i_numelmt, &
+                                                               i_faceunknowns, i_equadpts, i_gquadpts, &
+                                                               i_degree
+    INTEGER (KIND = GRID_SI), DIMENSION(:), INTENT(in)      :: i_edgeboundary
+    INTEGER (KIND = GRID_SI), DIMENSION(:,:), INTENT(in)    :: i_elementedges, i_elementnodes, &
+                                                               i_edgenodes, i_edgeinfo, i_elementdofs
+
+    INTEGER (KIND = GRID_SI)                                :: i_stage, i_alct
+    REAL (KIND = GRID_SR), DIMENSION(:,:), ALLOCATABLE      :: r_Q_secondstage, r_Q_laststage, r_flux
+
+!--- allocate workspace
+    ALLOCATE(r_Q_secondstage(i_nprogvars,i_numelmt*i_faceunknowns), &
+             r_Q_laststage(i_nprogvars,i_numelmt*i_faceunknowns), &
+             r_flux(i_nprogvars,i_numelmt*i_faceunknowns), stat=i_alct)
+          IF(i_alct /= 0) &
+            CALL grid_error(c_error='[timestepping]: Could not allocate auxiliary arrays')
+
+!--- initialize arrays for Runge-Kutta loop
+    r_Q_laststage   = r_Q_curr
+    r_Q_secondstage = 0.0_GRID_SR
+
+!--- Runge-Kutta loop
+    runge_kutta_loop: DO i_stage=1, i_stages
+      r_flux = 0.0_GRID_SR
+
+!--- compute flux matrix
+      CALL fvm_flux(r_flux, r_Q_laststage, r_S_curr, r_time, i_numelmt, i_numedge, &
+                    i_faceunknowns, r_metrics_inv, r_Dxi, r_Deta, r_epsi, r_gpsi, &
+                    r_eMinvpsi, r_eMinvdpsidxi, r_eMinvdpsideta, r_gMinvpsi, &
+                    i_equadpts, i_gquadpts, r_eqwei, r_gqwei, r_element_vol, &
+                    r_edgelength, r_normals, &
+                    i_edgeinfo, i_edgeboundary, i_elementdofs, r_coodof)
+
+!--- compute next stage and apply limiter to it
+      r_Q_next =        r_coeff(i_stage,1) * r_Q_curr &
+                 +      r_coeff(i_stage,2) * r_Q_laststage &
+                 +      r_coeff(i_stage,3) * r_Q_secondstage &
+                 + r_dt*r_coeff(i_stage,4) * r_flux
+
+      CALL limiter(p_ghand, r_Q_next, i_elementedges, i_edgeinfo, &
+                   r_edgelength, r_metrics_inv, i_numelmt, r_coonod, r_coodof, &
+                   i_edgenodes, i_elementnodes, i_elementdofs, i_numedge, &
+                   r_S_curr, i_faceunknowns, r_evander, r_einvvander)
+
+!---  update for next stage
+      r_Q_laststage = r_Q_next
+
+!--- store the 2nd stage for SSP(5,3)
+      IF (i_stage == 2) r_Q_secondstage = r_Q_next
+
+    END DO runge_kutta_loop
+
+!--- deallocate workspace
+    DEALLOCATE (r_Q_secondstage, r_Q_laststage, r_flux)
+
+  END SUBROUTINE timestepping
+
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE read_coefficients]:
+!> @brief
+!
+!> @param[in]     p_param           control structure for global parameters
+!> @param[out]    i_stages
+!> @param[out]    r_coeff
+!
+  SUBROUTINE read_coefficients(p_param, i_stages, r_coeff)
+
+    IMPLICIT NONE
+
+    TYPE(control_struct), INTENT(in)                                :: p_param
+    INTEGER (KIND = GRID_SI), INTENT(out)                           :: i_stages
+    REAL (KIND = GRID_SR), DIMENSION(:,:), ALLOCATABLE, INTENT(out) :: r_coeff
+
+    INTEGER, PARAMETER                                              :: i_open=50
+    INTEGER                                                         :: i_end, i_iost, i_ioerr, &
+                                                                       i_cnt, i_alct, i_maxlen
+    CHARACTER (len=70)                                              :: c_line
+    CHARACTER (len=4)                                               :: c_name1
+
+!------ Set constants
+
+    i_ioerr  = 0
+    i_end    = 1
+    i_maxlen = 4
+
+    SELECT CASE(p_param%num%c_timestepping)
+      CASE('euler')
+        c_name1 = 'eule'
+        i_stages = 1
+      CASE('rk22')
+        c_name1 = 'rk22'
+        i_stages = 2
+      CASE('rk33')
+        c_name1 = 'rk33'
+        i_stages = 3
+      CASE('rk34')
+        c_name1 = 'rk34'
+        i_stages = 4
+      CASE('rk35')
+        c_name1 = 'rk35'
+        i_stages = 5
+      CASE default
+        CALL grid_error(c_error='[read_coefficients]: timestepping method not supported!')
+    END SELECT
+
+!------ Open data file
+    OPEN(i_open, file='Timestepping.dat', status='old', action='read', iostat=i_iost)
+
+    IF(i_iost /= 0) THEN
+      write(i_ioerr,*) '[read_coefficients]: Error reading Timestepping.dat'
+    END IF
+
+!------ Read corresp. coeff. line by line
+
+    reading: DO
+      read(i_open, '(A70)', iostat=i_end) c_line
+      closing: IF(i_end < 0) THEN
+        close(i_open)
+        EXIT reading
+      ELSE closing
+        line: IF(c_line(1:1) == '#' .OR. c_line(1:1) == '!' .OR. &
+                 c_line(1:4) /= c_name1) THEN
+          cycle reading
+        END IF line
+
+        !------ allocate workspace and initialize vector
+        ALLOCATE(r_coeff(i_stages, i_maxlen), stat=i_alct)
+        IF(i_alct /= 0) &
+          CALL grid_error(c_error='[read_coefficients]: Could not allocate enough memory')
+
+        r_coeff = 0.0_GRID_SR
+
+        !------ read data
+        DO i_cnt = 1,i_stages
+          read(i_open,*) r_coeff(i_cnt,1:i_maxlen)
+        END DO !i_cnt
+
+      END IF closing
+    END DO reading
+
+  END SUBROUTINE read_coefficients
+
+!*******************************************************************************
+END MODULE DG_timestepping

@@ -1,0 +1,112 @@
+#-------------------------------------------------------------------
+# This file contains the definition of an initial triangulation
+# of a channel: x \in [0, 31] and y \in [0, 8.3] with reflecting
+# boundary conditons on all boundaries. At x=4.0 the mesh has
+# additional reflecting boundaries (simulating a dam) with a
+# small free passage between y=3.95 and y=4.35.
+#
+#  8.30 __________________________
+#       |    |                    |
+#  4.35 |    |                    |
+#  4.15 |___/_\___________________|
+#  3.95 |   \ /                   |
+#       |    |                    |
+#  0.00 |____|____________________|
+#      0.00 4.00                 31.00
+#
+# This file is used for the dambreak test case.
+#
+# j. behrens, 04/2006
+#-------------------------------------------------------------------
+# first give the global defining parameters
+!--- dimension of the grid coordinates
+GRID_DIMENSION
+2
+!--- number of vertices in each element (3: triangular, 4: quadrilateral)
+ELEMENT_VERTICES
+3
+!--- total number of nodes
+NUMBER_OF_NODES
+29
+!--- total number of edges
+NUMBER_OF_EDGES
+62
+!--- total number of elements
+NUMBER_OF_ELEMENTS
+34
+# now define the boundary condition flags
+DEF_INNERITEM
+0
+DEF_DIRICHLETBOUNDARY
+-1
+DEF_NEUMANNBOUNDARY
+-2
+# now define the nodes (short format)
+NODES_DESCRIPTION
+  1    0.0   8.3
+  2    4.0   4.35
+  3    4.0   8.3
+  4    2.0   4.15
+  5    0.0   4.15
+  6    0.0   0.0
+  7    4.0   3.95
+  8    4.0   0.0
+  9    4.001 0.0
+ 10    8.5   0.0
+ 11    6.0   4.15
+ 12    8.5   4.15
+ 13   13.0   4.15
+ 14   13.0   0.0
+ 15   17.5   0.0
+ 16   17.5   4.15
+ 17   22.0   4.15
+ 18   22.0   0.0
+ 19   26.5   0.0
+ 20   26.5   4.15
+ 21   31.0   4.15
+ 22   31.0   0.0
+ 23   31.0   8.3
+ 24   26.5   8.3
+ 25   22.0   8.3
+ 26   17.5   8.3
+ 27   13.0   8.3
+ 28    8.5   8.3
+ 29    4.001 8.3
+ELEMENTS_DESCRIPTION
+  1   1  2  3    3   -3 -3  0
+  2   2  1  4    3    0  0  0
+  3   5  4  1    3    0 -3  0
+  4   4  5  6    3   -3  0  0
+  5   6  7  4    3    0  0  0
+  6   7  6  8    3   -3 -3  0
+  7  10  7  9    3   -3 -3  0
+  8   7 10 11    3    0  0  0
+  9  12 11 10    3    0  0  0
+ 10  10 13 12    3    0  0  0
+ 11  13 10 14    3   -3  0  0
+ 12  15 13 14    3    0 -3  0
+ 13  13 15 16    3    0  0  0
+ 14  15 17 16    3    0  0  0
+ 15  17 15 18    3   -3  0  0
+ 16  19 17 18    3    0 -3  0
+ 17  17 19 20    3    0  0  0
+ 18  19 21 20    3    0  0  0
+ 19  21 19 22    3   -3 -3  0
+ 20  24 21 23    3   -3 -3  0
+ 21  21 24 20    3    0  0  0
+ 22  24 17 20    3    0  0  0
+ 23  17 24 25    3   -3  0  0
+ 24  26 17 25    3    0 -3  0
+ 25  17 26 16    3    0  0  0
+ 26  26 13 16    3    0  0  0
+ 27  13 26 27    3   -3  0  0
+ 28  28 13 27    3    0 -3  0
+ 29  13 28 12    3    0  0  0
+ 30  11 12 28    3    0  0  0
+ 31  28  2 11    3    0  0  0
+ 32   2 28 29    3   -3 -3  0
+ 33   2  7 11    3    0  0  0
+ 34   7  2  4    3    0  0  0
+#-------------------------------------------------------------------
+# end of file
+#-------------------------------------------------------------------

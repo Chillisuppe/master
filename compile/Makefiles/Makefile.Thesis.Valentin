@@ -1,0 +1,14 @@
+standingwave: maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_full.f90 DG_cfl.f90
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@cp MISC_bathy_etopo.f90 MISC_bathy.f90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp MISC_diag_mesh_efficiency.F90 MISC_diag.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_weak.F90 DG_flux.F90
+	@cp DG_initial_standingwave.f90 DG_initial.f90
+	@$(MAKE) executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/triang_basin_10_x_2.dat .
+	@cp $(DATDIR)/Parameters_standingwave.dat .

@@ -1,0 +1,151 @@
+#-----------------------------------------------------------
+# Test Cases from "Finite Volume Methods for the Multilayer
+#                  Shallow Water Equations with Applications
+#                  to Storm Surges", Mandli 2011
+#
+#             -- Definitions can be found on pp 112
+#-----------------------------------------------------------
+
+general: maincopy
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp DG_limiter_KuSV.F90 DG_limiter.F90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp $(SRCDIR)/DG_storm_drag_weisberg.f90 DG_storm_drag.f90
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp MISC_diag_gauges.F90 MISC_diag.F90
+	@cp $(DATDIR)/gaugedata_storm.dat gaugedata.dat
+
+storm1: general
+	@cp $(SRCDIR)/DG_initial_storm1.F90 DG_initial.F90
+	@cp DG_error_gradbathy.f90 DG_errorestimate.f90
+	@make executable
+	@make datacopy
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_basin.dat ./Triang.dat
+	@cp $(DATDIR)/Parameters_storm1.dat Parameters.dat
+
+storm2: general
+	@cp $(SRCDIR)/DG_initial_storm2.F90 DG_initial.F90
+	@cp DG_error_gradbathy.f90 DG_errorestimate.f90
+	@make executable
+	@make datacopy
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_basin.dat ./Triang.dat
+	@cp $(DATDIR)/Parameters_storm1.dat Parameters.dat
+
+storm3: general
+	@cp $(SRCDIR)/DG_initial_storm3.F90 DG_initial.F90
+	@cp DG_error_gradbathy.f90 DG_errorestimate.f90
+	@make executable
+	@make datacopy
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_basin.dat ./Triang.dat
+	@cp $(DATDIR)/Parameters_storm1.dat Parameters.dat
+
+storm4: general
+	@cp $(SRCDIR)/DG_initial_storm4.F90 DG_initial.F90
+	@cp DG_error_gradbathy.f90 DG_errorestimate.f90
+	@make executable
+	@make datacopy
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_basin.dat ./Triang.dat
+	@cp $(DATDIR)/Parameters_storm1.dat Parameters.dat
+
+storm5: general
+	@cp $(SRCDIR)/DG_initial_storm5.F90 DG_initial.F90
+	@cp DG_error_gradbathy.f90 DG_errorestimate.f90
+	@make executable
+	@make datacopy
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_basin.dat ./Triang.dat
+	@cp $(DATDIR)/Parameters_storm1.dat Parameters.dat
+
+storm6: general
+	@cp $(SRCDIR)/DG_initial_storm6.F90 DG_initial.F90
+	@cp DG_error_gradbathy.f90 DG_errorestimate.f90
+	@make executable
+	@make datacopy
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_basin.dat ./Triang.dat
+	@cp $(DATDIR)/Parameters_storm1.dat Parameters.dat
+
+
+#----------------------------------------------------------------
+#
+# Further testcases that were used in (Beisiegel, 2014) U Hamburg
+#
+#----------------------------------------------------------------
+
+storm_in_waterglass: maincopy
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp $(SRCDIR)/DG_storm_drag_weisberg.f90 DG_storm_drag.f90
+	@cp DG_limiter_KuSV.F90 DG_limiter.F90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp $(SRCDIR)/DG_initial_waterglass.F90 DG_initial.F90
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@make executable
+	@make datacopy
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_freebasin.dat ./Triang.dat
+	@cp $(DATDIR)/Parameters_storm_in_glass.dat Parameters.dat
+
+
+storm_advection: maincopy
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp $(SRCDIR)/DG_storm_drag_weisberg.f90 DG_storm_drag.f90
+	@cp DG_limiter_KuSV.F90 DG_limiter.F90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp $(SRCDIR)/DG_initial_storm_advection.F90 DG_initial.F90
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@make executable
+	@make datacopy
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_4by2_period_fine.dat ./Triang.dat
+	@cp $(DATDIR)/Parameters_storm_advection.dat Parameters.dat
+
+
+ike: maincopy
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp DG_limiter_KuSV.F90 DG_limiter.F90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+#	@cp DG_error_ike.f90 DG_errorestimate.f90
+	@cp DG_error_gradbathy.f90 DG_errorestimate.f90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_initial_ike.F90 DG_initial.F90
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_storm_drag_weisberg.f90 DG_storm_drag.f90
+	@$(MAKE) executable
+	@$(MAKE) datacopy
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_golf.dat .
+	@cp $(DATDIR)/Domain_golf.dat .
+	@cp $(DATDIR)/Parameters_golf.dat Parameters.dat
+	@cp $(DATDIR)/golf.grd .
+#	@cp $(DATDIR)/track_golf.dat track.dat
+	@cp $(DATDIR)/ike.storm .
+
+
+northsea: maincopy
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp DG_storm_drag_weisberg.f90 DG_storm_drag.f90
+	@cp DG_error_gradbathy.f90 DG_errorestimate.f90
+	@cp DG_limiter_KuSV.F90 DG_limiter.F90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_initial_northsea.f90 DG_initial.f90
+	@$(MAKE) executable
+	@$(MAKE) datacopy
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_northsea.dat .
+	@cp $(DATDIR)/Domain_northsea.dat .
+	@cp $(DATDIR)/Parameters_northsea.dat Parameters.dat
+	@cp $(DATDIR)/NorthseaCoarse.grd .

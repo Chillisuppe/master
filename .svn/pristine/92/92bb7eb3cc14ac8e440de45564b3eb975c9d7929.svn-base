@@ -1,0 +1,798 @@
+!*******************************************************************************
+!
+!> @file  IO_utils.F90
+!> @brief contains module IO_utils
+!
+!*******************************************************************************
+!
+! VERSION(S):
+!  1. original version                               j. behrens     07/1996
+!  2. largely extended                               j. behrens     11/1996
+!  3. changed command line io                        j. behrens     01/1997
+!  4. changed runtime output (adaptations)           j. behrens     01/1997
+!  5. control data struct, less command io           j. behrens     12/1997
+!  6. tiff file plotting included                    j. behrens     01/1998
+!  7. adapted to BJuGL                               j. behrens     01/2000
+!  8. compliant to amatos 1.0                        j. behrens     12/2000
+!  9. compliant to amatos 1.2                        j. behrens     03/2002
+! 10. added a host of new input parameters           j. behrens     05/2009
+! 11. added parameters for vtu output                n.beisiegel    01/2011
+! 12. added output for flexible timestep             n.beisiegel    01/2012
+!
+!*******************************************************************************
+! MODULE DESCRIPTION:
+!> @brief input/output routines (io_get...something, io_put...something)
+!
+MODULE IO_utils
+
+  USE FLASH_parameters
+  USE MISC_timing
+  USE MISC_system
+  USE GRID_api
+  USE DG_initial, ONLY : i_ntstintparam, i_ntstrealparam, i_ntstcharparam, &
+                         i_ntstlogparam, initial_setparam, p_testparam
+  USE IO_equation, ONLY : ioeqn_initparams, ioeqn_checkreadinput, &
+                          ioeqn_putinputfile
+  USE DG_equation, ONLY : p_iovars
+
+  PRIVATE
+  INTEGER, PARAMETER :: i_ioerr=0
+
+  PUBLIC :: io_getcmdline, io_getbatchinput, &
+            io_putparameters, io_putruntimeinfo, io_putinputfile, &
+            io_initparams
+
+  CONTAINS
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE io_getcmdline]:
+!> @brief reads options from command line
+!>
+!> @param[out]      p_cmd
+!
+  SUBROUTINE io_getcmdline(p_cmd)
+
+    IMPLICIT NONE
+
+    TYPE (control_struct), INTENT(out) :: p_cmd
+
+!--- local declarations
+    CHARACTER (len=io_fillen)          :: a_infln
+    INTEGER                            :: numargs
+    INTEGER                            :: i = 1
+    LOGICAL                            :: l_help       = .FALSE.
+    LOGICAL                            :: l_shoversion = .FALSE.
+    CHARACTER (len=2)                  :: option
+    CHARACTER (len=15)                 :: comdnam
+    CHARACTER (len=80)                 :: c_dummy
+
+!--- initialize output variables
+    a_infln  = 'Parameters.in'
+
+!--- read number commandline arguments
+!--- this is possibly non standard f90, but definitely quasi standard
+
+    p_cmd%cmd%l_output  = .FALSE.
+    p_cmd%cmd%l_logging = .FALSE.
+    numargs = sys_numcmdargs()
+    CALL sys_getcmdargs(0,c_dummy,i_len=len(c_dummy))
+    comdnam = c_dummy(1:15)
+    check_args: IF(numargs < 1) THEN
+      l_help = .TRUE. ! print_help
+    ELSE check_args
+
+!--- read command line arguments one by one
+      DO WHILE (i <= numargs)
+        CALL sys_getcmdargs(i,c_dummy,i_len=len(c_dummy))
+        option = c_dummy(1:2)
+
+!--- select the CASEs for command line options
+        eval_option: SELECT CASE (option)
+          CASE('-h', '-?') eval_option !--- request for help ---
+            l_help = .TRUE.
+            EXIT
+          CASE('-r') eval_option !--- print release information ---
+            l_shoversion = .TRUE.
+            i = i+1
+          CASE('-l') eval_option !--- switch on logging ---
+            p_cmd%cmd%l_logging = .TRUE.
+            i = i+1
+          CASE('-o') eval_option !--- redirect output into file ---
+            p_cmd%cmd%l_output = .TRUE.
+            i = i+1
+          CASE('-f') eval_option !--- supply input file name ---
+            i = i+1
+            CALL sys_getcmdargs(i,c_dummy,i_len=len(c_dummy))
+            a_infln = TRIM(c_dummy)
+            IF(a_infln(1:1) == '-') THEN  !--- check correctness of file name ---
+              l_help = .TRUE.
+              EXIT
+            ELSE
+              i = i+1
+            END IF
+          CASE DEFAULT eval_option !--- default CASE: show help ---
+            l_help = .TRUE.
+            EXIT
+        END SELECT eval_option
+      END DO
+    END IF check_args
+
+!--- update output structure
+    p_cmd%cmd%c_batchfile = a_infln
+
+!--- print help information
+    print_help: IF(l_help) THEN
+      write(GRID_parameters%ioout,1010) comdnam, TRIM(a_infln)
+      write(GRID_parameters%ioout,1011) GRID_parameters%dateyear, GRID_parameters%author_name
+      write(i_ioerr,*) 'STOPPED ... hope this made it clear'
+      STOP
+    END IF print_help
+
+!--- print version information
+    print_version: IF(l_shoversion) THEN
+      write(GRID_parameters%ioout,1001) GRID_parameters%program_name, GRID_parameters%version, GRID_parameters%subversion, &
+                            GRID_parameters%patchversion, GRID_parameters%datemonth, GRID_parameters%dateyear, &
+                            GRID_parameters%author_name, GRID_parameters%author_email, GRID_parameters%author_affil1, &
+                            GRID_parameters%author_affil2, GRID_parameters%author_affil3
+      IF(GRID_parameters%iolog > 0) &
+        write(GRID_parameters%iolog,1001) GRID_parameters%program_name, GRID_parameters%version, GRID_parameters%subversion, &
+                            GRID_parameters%patchversion, GRID_parameters%datemonth, GRID_parameters%dateyear, &
+                            GRID_parameters%author_name, GRID_parameters%author_email, GRID_parameters%author_affil1, &
+                            GRID_parameters%author_affil2, GRID_parameters%author_affil3
+    END IF print_version
+
+    RETURN
+
+ 1001    FORMAT(1x,'***** ***** ***** ***** ***** ***** ***** ***** ***** *****',/ &
+                1x,'***** PROGRAM: ',a15,24x,                            '*****',/ &
+                1x,'***** VERSION: ',i2.2,'.',i2.2,'.',i2.2,31x,         '*****',/ &
+                1x,'***** DATE:    ',i2.2,'/',i4.4,32x,                  '*****',/ &
+                1x,'***** AUTHOR:  ',a15,24x,                            '*****',/ &
+                1x,'***** E-MAIL:  ',a39,                                '*****',/ &
+                1x,'***** ADDRESS: ',a39,                                '*****',/ &
+                1x,'*****          ',a39,                                '*****',/ &
+                1x,'*****          ',a39,                                '*****',/ &
+                1x,'***** ***** ***** ***** ***** ***** ***** ***** ***** *****')
+ 1010    FORMAT(1x,'USAGE: ',a15,' {-f name} {-h} {-l} {-o} {-r}',/ &
+                1x,'       -f: parameter input filename is << name >>, (default ', a,')',/ &
+                1x,'       -h: help information (this output)',/ &
+                1x,'       -l: switch on log file output',/ &
+                1x,'       -o: redirect standard output to a file',/ &
+                1x,'       -r: release information')
+ 1011    FORMAT(1x,'Copyright (c) 1996-',i4.4,', ',a13)
+
+  END SUBROUTINE io_getcmdline
+
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE io_initparams]:
+!> @brief brief description
+!>
+!> @param[out]      p_param         control structure for global parameters
+!
+  SUBROUTINE io_initparams(p_param)
+
+    IMPLICIT NONE
+
+    TYPE (control_struct), INTENT(out) :: p_param
+
+!--- local declarations
+    INTEGER                                         :: i_cnt
+
+!--- initialize parameters
+!--- numeric parameters
+    p_param%num%r_deltatime     = -1.0_GRID_SR
+    p_param%num%r_reftolerance  = -1.0_GRID_SR
+    p_param%num%r_crstolerance  = -1.0_GRID_SR
+    p_param%num%r_refwatermark  = -1.0_GRID_SR
+    p_param%num%r_crswatermark  = -1.0_GRID_SR
+    p_param%num%r_cflmax        = -1.0_GRID_SR
+    p_param%num%i_experiment    = -1_GRID_SI
+    p_param%num%i_crslevel      = -1_GRID_SI
+    p_param%num%i_reflevel      = -1_GRID_SI
+    p_param%num%i_frsttimestep  =  1_GRID_SI
+    p_param%num%i_lasttimestep  = -1_GRID_SI
+    p_param%num%r_starttime     =  0.0_GRID_SR
+    p_param%num%r_finaltime     = -1.0_GRID_SR
+    p_param%num%i_refneigh      =  0_GRID_SI
+    p_param%num%c_timestepping  = 'euler'
+!--- IO parameters
+    p_param%io%i_plotoffset     = -1_GRID_SI
+    p_param%io%r_plotint        = -1.0_GRID_SR
+    p_param%io%i_saveoffset     = -1_GRID_SI
+    p_param%io%l_diagnostics    = .FALSE.
+    p_param%io%i_diagoffset     = -1_GRID_SI
+    p_param%io%i_savelast       = -1_GRID_SI
+    p_param%io%i_numsigs        =  0_GRID_SI
+    p_param%io%l_netcdf         = .FALSE.
+    p_param%io%l_para           = .FALSE.
+    p_param%io%l_solplot        = .FALSE.
+    p_param%io%c_domainfile     = 'Domain.dat'
+    p_param%io%c_triangfile     = 'Triang.dat'
+    p_param%io%i_subtriangpts   = 2_GRID_SI
+
+!--- initialize equation specific parameters
+    CALL ioeqn_initparams
+
+!--- allocate test case parameter arrays
+    ALLOCATE(p_testparam%tint(i_ntstintparam), p_testparam%treal(i_ntstrealparam), &
+             p_testparam%tchar(i_ntstcharparam), p_testparam%tlog(i_ntstlogparam))
+    CALL initial_setparam
+
+    DO i_cnt = 1, i_ntstintparam
+      ALLOCATE(INTEGER (KIND = GRID_SI) :: p_testparam%tint(i_cnt)%p_value(p_testparam%tint(i_cnt)%i_size))
+    END DO
+    DO i_cnt = 1, i_ntstrealparam
+      ALLOCATE(REAL (KIND = GRID_SR) :: p_testparam%treal(i_cnt)%p_value(p_testparam%treal(i_cnt)%i_size))
+    END DO
+
+  END SUBROUTINE io_initparams
+
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE io_getbatchinput]:
+!> @brief reads user input from file
+!>
+!> @param[out]      p_param         control structure for global parameters
+!
+  SUBROUTINE io_getbatchinput(p_param)
+
+    IMPLICIT NONE
+
+    TYPE (control_struct), INTENT(out)              :: p_param
+
+!--- local declarations
+    INTEGER, PARAMETER                              :: i_iofil = 10
+    CHARACTER (len=80)                              :: a_filrow, c_errtmp
+    CHARACTER (LEN=GRID_parameters%i_stringlength)  :: c_tmp
+    INTEGER                                         :: i_iost, i_ioend, &
+      i_tmp, i_cln, i_cnt, i_alct
+    LOGICAL, DIMENSION(i_ntstintparam)              :: l_tintisset
+    LOGICAL, DIMENSION(i_ntstrealparam)             :: l_trealisset
+    LOGICAL, DIMENSION(i_ntstcharparam)             :: l_tcharisset
+    LOGICAL, DIMENSION(i_ntstlogparam)              :: l_tlogisset
+
+!--- initialize
+    i_cln = MIN(GRID_parameters%i_stringlength,io_fillen)
+    l_tintisset  = .FALSE.
+    l_trealisset = .FALSE.
+    l_tcharisset = .FALSE.
+    l_tlogisset  = .FALSE.
+
+!--- open input file
+    open(unit=i_iofil, file=p_param%cmd%c_batchfile, status='OLD', &
+         action='READ', iostat=i_iost)
+    file_notopen: IF(i_iost /= 0) THEN
+      write(i_ioerr,*) 'ERROR: Filename: ', p_param%cmd%c_batchfile
+      IF(GRID_parameters%iolog > 0) &
+        write(GRID_parameters%iolog,*) 'ERROR: Filename: ', p_param%cmd%c_batchfile
+      CALL grid_error(c_error='[get_batchinput]: could not read input file')
+    ELSE file_notopen
+      write(GRID_parameters%ioout,1000) GRID_parameters%program_name, GRID_parameters%version, &
+                                        GRID_parameters%subversion, GRID_parameters%patchversion, &
+                                        p_param%cmd%c_batchfile
+      IF(GRID_parameters%iolog > 0) THEN
+        write(GRID_parameters%iolog,*) 'INFO: Filename: ', p_param%cmd%c_batchfile, ' opened on unit: ', i_iofil
+        write(GRID_parameters%iolog,1000) GRID_parameters%program_name, GRID_parameters%version, &
+                                          GRID_parameters%subversion, GRID_parameters%patchversion, &
+                                          p_param%cmd%c_batchfile
+      END IF
+    END IF file_notopen
+
+!--- read line by line
+    read_loop: DO
+      read(i_iofil,'(A)',iostat=i_ioend) a_filrow
+
+!--- if file ended
+      file_end: IF(i_ioend /= 0) THEN
+        close(i_iofil)
+        IF(GRID_parameters%iolog > 0) &
+          write(GRID_parameters%iolog,*) 'INFO: Closed file on unit: ', i_iofil
+        EXIT
+      ELSE file_end
+
+!--- decide what to DO with line according to first character
+        comment_line: IF(a_filrow(1:1) == '#' .or. a_filrow(1:1) == '!') THEN
+          CYCLE read_loop
+        ELSE IF(a_filrow(1:14) == 'EXPERIMENT_NUM') THEN comment_line
+          read(i_iofil,*) p_param%num%i_experiment
+        ELSE IF(a_filrow(1:14) == 'FINE_GRID_LEVE') THEN comment_line
+          read(i_iofil,*) p_param%num%i_reflevel
+        ELSE IF(a_filrow(1:14) == 'COARSE_GRID_LE') THEN comment_line
+          read(i_iofil,*) p_param%num%i_crslevel
+        ELSE IF(a_filrow(1:14) == 'TOLERANCE_OF_R') THEN comment_line
+          read(i_iofil,*) p_param%num%r_reftolerance
+        ELSE IF(a_filrow(1:14) == 'TOLERANCE_OF_C') THEN comment_line
+          read(i_iofil,*) p_param%num%r_crstolerance
+        ELSE IF(a_filrow(1:14) == 'WATERMARK_OF_R') THEN comment_line
+          read(i_iofil,*) p_param%num%r_refwatermark
+        ELSE IF(a_filrow(1:14) == 'WATERMARK_OF_C') THEN comment_line
+          read(i_iofil,*) p_param%num%r_crswatermark
+        ELSE IF(a_filrow(1:14) == 'TIMESTEP_LENGT') THEN comment_line
+          read(i_iofil,*) p_param%num%r_deltatime
+        ELSE IF(a_filrow(1:14) == 'TIMESTEPPING  ') THEN comment_line
+          read(i_iofil,*) p_param%num%c_timestepping
+        ELSE IF(a_filrow(1:14) == 'MAX_CFL_NUMBER') THEN comment_line
+          read(i_iofil,*) p_param%num%r_cflmax
+        ELSE IF(a_filrow(1:14) == 'BEGINNING_TIME') THEN comment_line
+          read(i_iofil,*) p_param%num%i_frsttimestep
+        ELSE IF(a_filrow(1:14) == 'FINISHING_TIME') THEN comment_line
+          read(i_iofil,*) p_param%num%i_lasttimestep
+        ELSE IF(a_filrow(1:14) == 'TIMESTEPPING_S') THEN comment_line
+          read(i_iofil,*) p_param%num%r_starttime
+        ELSE IF(a_filrow(1:14) == 'TIMESTEPPING_E') THEN comment_line
+          read(i_iofil,*) p_param%num%r_finaltime
+        ELSE IF(a_filrow(1:14) == 'ADAPT_REGION  ') THEN comment_line
+          read(i_iofil,*) p_param%num%i_refneigh
+!--- IO parameters
+        ELSE IF(a_filrow(1:14) == 'STEPS_BTW_PLOT') THEN comment_line
+          read(i_iofil,*) p_param%io%i_plotoffset
+        ELSE IF(a_filrow(1:14) == 'TIME_BTW_PLOTS') THEN comment_line
+          read(i_iofil,*) p_param%io%r_plotint
+        ELSE IF(a_filrow(1:14) == 'NETCDF_FILE_PL') THEN comment_line
+          read(i_iofil,*) i_tmp
+          IF(i_tmp /= 0) p_param%io%l_netcdf= .TRUE.
+        ELSE IF(a_filrow(1:14) == 'VTU_FILE_PLOTT') THEN comment_line
+          read(i_iofil,*) i_tmp
+          IF(i_tmp /= 0) p_param%io%l_para= .TRUE.
+        ELSE IF(a_filrow(1:14) == 'ANASOL_PLOTTIN') THEN comment_line
+          read(i_iofil,*) i_tmp
+          IF(i_tmp /= 0) p_param%io%l_solplot= .TRUE.
+        ELSE IF(a_filrow(1:14) == 'SUBTRIANG_PTS ') THEN comment_line
+          read(i_iofil,*) p_param%io%i_subtriangpts
+        ELSE IF(a_filrow(1:14) == 'STEPS_BTW_SAVE') THEN comment_line
+          read(i_iofil,*) p_param%io%i_saveoffset
+        ELSE IF(a_filrow(1:14) == 'SAVE_FINISH_CO') THEN comment_line
+          read(i_iofil,*) p_param%io%i_savelast
+        ELSE IF(a_filrow(1:14) == 'DIAGNOSTICS   ') THEN comment_line
+          read(i_iofil,*) i_tmp
+          IF(i_tmp /= 0) p_param%io%l_diagnostics = .TRUE.
+        ELSE IF(a_filrow(1:14) == 'STEPS_BTW_DIAG') THEN comment_line
+          read(i_iofil,*) p_param%io%i_diagoffset
+        ELSE IF(a_filrow(1:14) == 'DOMAIN_FILE_NA') THEN comment_line
+          read(i_iofil,2010,iostat=i_tmp) c_tmp
+          IF(i_tmp == 0) p_param%io%c_domainfile(1:i_cln) = c_tmp(1:i_cln)
+        ELSE IF(a_filrow(1:14) == 'TRIANG_FILE_NA') THEN comment_line
+          read(i_iofil,2010,iostat=i_tmp) c_tmp
+          IF(i_tmp == 0) p_param%io%c_triangfile(1:i_cln) = c_tmp(1:i_cln)
+        ELSE IF(a_filrow(1:14) == 'NUM_SIGNATURE_') THEN comment_line
+          read(i_iofil,*) p_param%io%i_numsigs
+        ELSE IF(a_filrow(1:14) == 'SIGNATURE_FILE') THEN comment_line
+          ALLOCATE(p_param%io%c_sigfiles(p_param%io%i_numsigs), stat=i_alct)
+          IF(i_alct /= 0) CALL grid_error(c_error='[io_getbatchinput] Could not allocate c_sigfiles')
+          DO i_cnt=1,p_param%io%i_numsigs
+            read(i_iofil,2010,iostat=i_tmp) c_tmp
+            IF(i_tmp == 0) p_param%io%c_sigfiles(i_cnt)(1:i_cln)= c_tmp(1:i_cln)
+          END DO
+!--- equation specific parameters
+        ELSE IF(ioeqn_checkreadinput(a_filrow(1:14), i_iofil)) THEN comment_line
+          ! everything is done in ioeqn_checkreadinput!
+        ELSE comment_line
+          DO i_cnt=1, i_ntstintparam
+            IF(a_filrow(1:14) == p_testparam%tint(i_cnt)%c_keyword) THEN
+              READ(i_iofil,*) p_testparam%tint(i_cnt)%p_value(1:p_testparam%tint(i_cnt)%i_size)
+              l_tintisset(i_cnt) = .TRUE.
+            END IF
+          END DO
+          DO i_cnt=1, i_ntstrealparam
+            IF(a_filrow(1:14) == p_testparam%treal(i_cnt)%c_keyword) THEN
+              READ(i_iofil,*) p_testparam%treal(i_cnt)%p_value(1:p_testparam%treal(i_cnt)%i_size)
+              l_trealisset(i_cnt) = .TRUE.
+            END IF
+          END DO
+          DO i_cnt=1, i_ntstcharparam
+            IF(a_filrow(1:14) == p_testparam%tchar(i_cnt)%c_keyword) THEN
+              READ(i_iofil,2010,iostat=i_tmp) c_tmp
+              IF(i_tmp == 0) p_testparam%tchar(i_cnt)%p_value = c_tmp(1:i_cln)
+              l_tcharisset(i_cnt) = .TRUE.
+            END IF
+          END DO
+          DO i_cnt=1, i_ntstlogparam
+            IF(a_filrow(1:14) == p_testparam%tlog(i_cnt)%c_keyword) THEN
+              READ(i_iofil,*) i_tmp
+              IF(i_tmp == 0) THEN
+                p_testparam%tlog(i_cnt)%p_value = .FALSE.
+              ELSE
+                p_testparam%tlog(i_cnt)%p_value = .TRUE.
+              END IF
+              l_tlogisset(i_cnt) = .TRUE.
+            END IF
+          END DO
+        END IF comment_line
+      END IF file_end
+    END DO read_loop
+
+!--- error handling
+!--- check if must-haves are set
+    no_value: IF((p_param%num%r_reftolerance  < 0.0) .OR. &
+                 (p_param%num%r_crstolerance  < 0.0) .OR. &
+                 (p_param%num%r_refwatermark  < 0.0) .OR. &
+                 (p_param%num%r_crswatermark  < 0.0) .OR. &
+                 (p_param%num%i_experiment    < 0)   .OR. &
+                 (p_param%num%i_crslevel      < 0)   .OR. &
+                 (p_param%num%i_reflevel      < 0)   .OR. &
+                 (p_param%io%i_diagoffset     < 0)   .OR. &
+                 (p_param%io%i_saveoffset     < 0)) THEN
+      CALL grid_error(c_error='[io_getbatchinput]: incomplete input, try again')
+    END IF no_value
+
+!--- check parameters for start and end of simulation
+    IF(p_param%num%i_frsttimestep < 1) &
+      CALL grid_error(c_error='[io_getbatchinput]: Please set BEGINNING_TIMESTEP >= 1')
+
+    IF(p_param%num%r_starttime < 0.0) &
+      CALL grid_error(c_error='[io_getbatchinput]: Please set TIMESTEPPING_START_TIME >= 0.0')
+
+    ! checks for constant time step sizes
+    IF(p_param%num%i_lasttimestep > 0) THEN
+      IF(p_param%num%r_finaltime > 0.0) THEN
+        CALL grid_error(c_error='[io_getbatchinput]: Please do not set both FINISHING_TIMESTEP > 0 and TIMESTEPPING_END_TIME > 0')
+      END IF
+
+      IF(p_param%num%i_lasttimestep < p_param%num%i_frsttimestep) THEN
+        CALL grid_error(c_error='[io_getbatchinput]: Please set FINISHING_TIMESTEP >= BEGINNING_TIMESTEP')
+      END IF
+
+      IF(p_param%num%r_deltatime <= 0.0) THEN
+        CALL grid_error(c_error='[io_getbatchinput]: Please set TIMESTEP_LENGTH > 0.0')
+      END IF
+
+      IF((p_param%io%l_para) .OR. (p_param%io%l_netcdf)) THEN
+        IF(p_param%io%i_plotoffset <= 0) &
+          CALL grid_error(c_error='[io_getbatchinput]: Please set STEPS_BTW_PLOTS > 0')
+      END IF
+    END IF
+
+    ! checks for variable time step sizes
+    IF(p_param%num%r_finaltime > 0.0) THEN
+      ! use as marker for adaptive timestepping
+      p_param%num%i_lasttimestep = -1_GRID_SI
+
+      IF(p_param%num%r_finaltime <= p_param%num%r_starttime) THEN
+        CALL grid_error(c_error='[io_getbatchinput]: Please set TIMESTEPPING_END_TIME > TIMESTEPPING_START_TIME')
+      END IF
+
+      IF(p_param%num%r_cflmax <= 0.0) THEN
+        CALL grid_error(c_error='[io_getbatchinput]: Please set MAX_CFL_NUMBER > 0.0')
+      END IF
+
+      IF((p_param%io%l_para) .OR. (p_param%io%l_netcdf)) THEN
+        IF(p_param%io%r_plotint <= 0) &
+          CALL grid_error(c_error='[io_getbatchinput]: Please set TIME_BTW_PLOTS > 0.0')
+      END IF
+   END IF
+
+    DO i_cnt=1, i_ntstintparam
+      IF(.NOT. l_tintisset(i_cnt)) THEN
+        WRITE(c_errtmp,*) '[io_getbatchinput]: parameter "', &
+          TRIM(p_testparam%tint(i_cnt)%c_keyword), '" is missing in Parameters file!'
+        CALL grid_error(c_error=c_errtmp)
+      END IF
+    END DO
+    DO i_cnt=1, i_ntstrealparam
+      IF(.NOT. l_trealisset(i_cnt)) THEN
+        WRITE(c_errtmp,*) '[io_getbatchinput]: parameter "', &
+          TRIM(p_testparam%treal(i_cnt)%c_keyword), '" is missing in Parameters file!'
+        CALL grid_error(c_error=c_errtmp)
+      END IF
+    END DO
+    DO i_cnt=1, i_ntstcharparam
+      IF(.NOT. l_tcharisset(i_cnt)) THEN
+        WRITE(c_errtmp,*) '[io_getbatchinput]: parameter "', &
+          TRIM(p_testparam%tchar(i_cnt)%c_keyword), '" is missing in Parameters file!'
+        CALL grid_error(c_error=c_errtmp)
+      END IF
+    END DO
+    DO i_cnt=1, i_ntstlogparam
+      IF(.NOT. l_tlogisset(i_cnt)) THEN
+        WRITE(c_errtmp,*) '[io_getbatchinput]: parameter "', &
+          TRIM(p_testparam%tlog(i_cnt)%c_keyword), '" is missing in Parameters file!'
+        CALL grid_error(c_error=c_errtmp)
+      END IF
+    END DO
+
+    RETURN
+
+ 1000 FORMAT(1x,'***** ***** ***** ***** ***** ***** ***** ***** ***** *****',/ &
+             1x,'***** PROGRAM:   ',a15,22x,                          '*****',/ &
+             1x,'***** VERSION:   ',i2.2,'.',i2.2,'.',i2.2,29x,       '*****',/ &
+             1x,'*****            Started in BATCH input mode          *****',/ &
+             1x,'***** INPUTFILE: ',a20,17x,                          '*****',/ &
+             1x,'***** ***** ***** ***** ***** ***** ***** ***** ***** *****',/)
+ 2010 FORMAT(a)
+
+  END SUBROUTINE io_getbatchinput
+
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE io_putparameters]:
+!> @brief writes out parameters in a nice way
+!>
+!> @param[in]       p_param         control structure for global parameters
+!
+  SUBROUTINE io_putparameters(p_param)
+
+!--- local declarations
+
+    IMPLICIT NONE
+
+    TYPE (control_struct), INTENT(in) :: p_param
+    INTEGER                           :: i1, i2, i3, i9, i10, i11, i12, i13
+    REAL (KIND = GRID_SR)             :: r4, r5, r6, r7, r8
+
+!--- temporary store
+
+    i1  = p_param%num%i_experiment
+    i2  = p_param%num%i_reflevel
+    i3  = p_param%num%i_crslevel
+    r4  = p_param%num%r_reftolerance
+    r5  = p_param%num%r_crstolerance
+    r6  = p_param%num%r_refwatermark
+    r7  = p_param%num%r_crswatermark
+    r8  = p_param%num%r_deltatime
+    i9  = p_param%num%i_frsttimestep
+    i10 = p_param%num%i_lasttimestep
+    i11 = p_param%io%i_saveoffset
+    i12 = p_param%io%i_plotoffset
+    i13 = p_param%io%i_savelast
+
+!--- write statement
+
+    write(GRID_parameters%ioout,1000) i1, i2, i3, &
+      r4, r5, r6, r7, r8, i9, i10, i11, i12, i13
+    IF(GRID_parameters%iolog > 0) &
+      write(GRID_parameters%iolog,1000) i1, i2, i3, &
+        r4, r5, r6, r7, r8, i9, i10, i11, i12, i13
+
+    RETURN
+
+ 1000    FORMAT(1x,'***** ***** ***** ***** ***** ***** ***** ***** ***** *****',/ &
+                1x,'*****                Global Parameters                *****',/ &
+                1x,'***** ----- ----- ----- ----- ----- ----- ----- ----- *****',/ &
+                1x,'***** Experiment No.',25x,i8,                       ' *****',/ &
+                1x,'***** ----- ----- ----- ----- ----- ----- ----- ----- *****',/ &
+                1x,'***** Finest grid level',22x,i8,                    ' *****',/ &
+                1x,'***** Coarsest grid level',20x,i8,                  ' *****',/ &
+                1x,'***** Refinement tolerance',15x,e12.4,              ' *****',/ &
+                1x,'***** Coarsening tolerance',15x,e12.4,              ' *****',/ &
+                1x,'***** Refinement watermark',15x,e12.4,              ' *****',/ &
+                1x,'***** Coarsening watermark',15x,e12.4,              ' *****',/ &
+                1x,'***** ----- ----- ----- ----- ----- ----- ----- ----- *****',/ &
+                1x,'***** Timestep length',20x,e12.4,                   ' *****',/ &
+                1x,'***** First timestep',25x,i8,                       ' *****',/ &
+                1x,'***** Last timestep',26x,i8,                        ' *****',/ &
+                1x,'***** ----- ----- ----- ----- ----- ----- ----- ----- *****',/ &
+                1x,'***** Timesteps between save',17x,i8,               ' *****',/ &
+                1x,'***** Timesteps between plot',17x,i8,               ' *****',/ &
+                1x,'***** Flag for last save',21x,i8,                   ' *****',/ &
+                1x,'***** ***** ***** ***** ***** ***** ***** ***** ***** *****',/)
+
+  END SUBROUTINE io_putparameters
+
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE io_putruntimeinfo]:
+!> @brief prints some information on the current run time status
+!>
+!> @param[in]       p_ghand     grid handling data structure
+!> @param[in,out]   p_info      runtime information structure
+!> @param[in,out]   p_time
+!
+  SUBROUTINE io_putruntimeinfo(p_ghand, p_info, p_time)
+
+    IMPLICIT NONE
+
+    TYPE (grid_handle), INTENT(in) :: p_ghand
+    TYPE (rt_info), INTENT(inout)  :: p_info
+    TYPE (sw_info), INTENT(inout)  :: p_time
+
+!--- local declarations
+    INTEGER                        :: i_cnt
+
+!--- output to console
+    write(GRID_parameters%ioout,1000) p_info%i_step, p_info%r_modeltime, p_info%r_timestep, &
+                        p_info%r_velmax, p_info%r_sshmax, p_info%r_sshmin, p_info%r_cflnumber, &
+                        p_info%i_adapit, p_ghand%i_enumber, p_ghand%i_enumfine, &
+                        p_ghand%i_gnumber, p_ghand%i_gnumfine, &
+                        p_ghand%i_nnumber
+
+    DO i_cnt=1,p_time%i_num
+      write(GRID_parameters%ioout,1003) p_time%p_tim(i_cnt)%c_tim, p_time%p_tim(i_cnt)%r_tim
+    END DO
+
+    IF((p_info%l_saved) .OR. (p_info%l_ploted) .OR. (p_info%l_diaged)) &
+      write(GRID_parameters%ioout,'(1x,A)') '+++++ ----- ----- ----- ----- ----- ----- ----- ----- +++++'
+
+    IF(p_info%l_saved) &
+      write(GRID_parameters%ioout,'(1x,A)') '+++++ Saveset transferred to disk in this step        +++++'
+
+    IF (p_info%l_ploted) &
+      write(GRID_parameters%ioout,'(1x,A)') '+++++ Plotting performed in this step                 +++++'
+
+    IF (p_info%l_diaged) &
+      write(GRID_parameters%ioout,'(1x,A)') '+++++ Diagnostics performed in this step              +++++'
+
+    write(GRID_parameters%ioout,'(1x,A,/)') '+++++ +++++ +++++ +++++ +++++ +++++ +++++ +++++ +++++ +++++'
+
+!--- output to log file
+    IF(GRID_parameters%iolog > 0) THEN
+      write(GRID_parameters%iolog,1000) p_info%i_step, p_info%r_modeltime, p_info%r_timestep, &
+                          p_info%r_velmax, p_info%r_sshmax, p_info%r_sshmin, p_info%r_cflnumber, &
+                          p_info%i_adapit, p_ghand%i_enumber, p_ghand%i_enumfine, &
+                          p_ghand%i_gnumber, p_ghand%i_gnumfine, &
+                          p_ghand%i_nnumber
+
+      DO i_cnt=1,p_time%i_num
+        write(GRID_parameters%iolog,1003) p_time%p_tim(i_cnt)%c_tim, p_time%p_tim(i_cnt)%r_tim
+      END DO
+
+      IF((p_info%l_saved) .OR. (p_info%l_ploted) .OR. (p_info%l_diaged)) &
+        write(GRID_parameters%iolog,'(1x,A)') '+++++ ----- ----- ----- ----- ----- ----- ----- ----- +++++'
+
+      IF(p_info%l_saved) &
+        write(GRID_parameters%iolog,'(1x,A)') '+++++ Saveset transferred to disk in this step        +++++'
+
+      IF (p_info%l_ploted) &
+        write(GRID_parameters%iolog,'(1x,A)') '+++++ Plotting performed in this step                 +++++'
+
+      IF (p_info%l_diaged) &
+        write(GRID_parameters%iolog,'(1x,A)') '+++++ Diagnostics performed in this step              +++++'
+
+      write(GRID_parameters%iolog,'(1x,A,/)') '+++++ +++++ +++++ +++++ +++++ +++++ +++++ +++++ +++++ +++++'
+    END IF
+
+!--- reset info structure
+    p_info%i_adapit = 0
+    p_info%l_saved  = .FALSE.
+    p_info%l_ploted = .FALSE.
+    p_info%l_diaged = .FALSE.
+
+ 1000    FORMAT(1x,'+++++ +++++ +++++ +++++ +++++ +++++ +++++ +++++ +++++ +++++',/ &
+                1x,'+++++            Runtime Information Output           +++++',/ &
+                1x,'+++++ ----- ----- ----- ----- ----- ----- ----- ----- +++++',/ &
+                1x,'+++++ Timestep number',24x,i8,                      ' +++++',/ &
+                1x,'+++++ Model time',25x,e12.4,                        ' +++++',/ &
+                1x,'+++++ Timestep size',22x,e12.4,                     ' +++++', /&
+                1x,'+++++ Max. velocity',22x,e12.4,                     ' +++++',/ &
+                1x,'+++++ Max. ssh (dev. from r_depth)',7x,e12.4,       ' +++++',/ &
+                1x,'+++++ Min. ssh (dev. from r_depth)',7x,e12.4,       ' +++++',/ &
+                1x,'+++++ ----- ----- ----- ----- ----- ----- ----- ----- +++++',/ &
+                1x,'+++++ CFL number in this step',12x,e12.4,           ' +++++',/ &
+                1x,'+++++ ----- ----- ----- ----- ----- ----- ----- ----- +++++',/ &
+                1x,'+++++ Inner iterations (for adaptation)',6x,i8,     ' +++++',/ &
+                1x,'+++++ ----- ----- ----- ----- ----- ----- ----- ----- +++++',/ &
+                1x,'+++++ Number of elements',21x,i8,                   ' +++++',/ &
+                1x,'+++++ Number of elements (fine grid)',9x,i8,        ' +++++',/ &
+                1x,'+++++ Number of edges',24x,i8,                      ' +++++',/ &
+                1x,'+++++ Number of edges (fine grid)',12x,i8,          ' +++++',/ &
+                1x,'+++++ Number of nodes',24x,i8,                      ' +++++',/ &
+                1x,'+++++ ----- ----- ----- ----- ----- ----- ----- ----- +++++')
+ 1003    FORMAT(1x,'+++++ Time spent in ',a16,5x,e12.4,                 ' +++++')
+
+  END SUBROUTINE io_putruntimeinfo
+
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE io_putinputfile]:
+!> @brief writes a parameter file conforming to io_getbatchinput
+!>
+!> @param[in]       p_param         control structure for global parameters
+!> @param[in]       i_frsttimestep  first timestep for parameter file to be written
+!> @param[in]       r_starttime     initial simulation time for parameter file to be written
+!> @param[in]       i_lasttimestep  last timestep for parameter file to be written (optional)
+!> @param[in]       r_finaltime     final simulation time for parameter file to be written (optional)
+!
+  SUBROUTINE io_putinputfile(p_param, i_frsttimestep, r_starttime, i_lasttimestep, r_finaltime)
+
+    IMPLICIT NONE
+
+    TYPE (control_struct), INTENT(in)                     :: p_param
+    INTEGER (KIND = GRID_SI), INTENT(in)                  :: i_frsttimestep
+    REAL (KIND = GRID_SR), INTENT(in)                     :: r_starttime
+    INTEGER (KIND = GRID_SI), INTENT(in), OPTIONAL        :: i_lasttimestep
+    REAL (KIND = GRID_SR), INTENT(in), OPTIONAL           :: r_finaltime
+
+!--- local declarations
+    INTEGER (KIND = GRID_SI)                              :: i_unit = 15, i_fstat, &
+      i_diag, i_netcdf, i_para, i_solplot, i_cnt, i_cln
+    CHARACTER (len=32)                                    :: c_file
+    CHARACTER (len=28)                                    :: c_tmp
+
+!--- temporary store
+    i_cln = MAX(GRID_parameters%i_stringlength,io_fillen)
+
+    i_diag = 0
+    IF(p_param%io%l_diagnostics) i_diag = 1
+    i_netcdf = 0
+    IF(p_param%io%l_netcdf) i_netcdf = 1
+    i_para = 0
+    IF(p_param%io%l_para) i_para = 1
+    i_solplot = 0
+    IF(p_param%io%l_solplot) i_solplot = 1
+
+!--- open file
+    WRITE(c_tmp,*) TRIM(GRID_parameters%program_name), '_input.'
+    WRITE(c_file,'(a28,i4.4)') TRIM(c_tmp), p_param%num%i_experiment+1
+    c_file= ADJUSTL(c_file)
+    OPEN(i_unit, file=c_file, action='write', form='formatted', &
+        status='replace', iostat=i_fstat)
+    not_opened: IF(i_fstat /= 0) THEN
+      CALL grid_error(c_error='[io_putinputfile]: parameter input file could not be opened.')
+    END IF not_opened
+    IF(GRID_parameters%iolog > 0) &
+      WRITE(GRID_parameters%iolog,*) 'INFO: Filename: ', c_file, ' opened on unit: ', i_unit
+
+!--- write numerical and IO parameters
+    WRITE(i_unit,'(A)')      '# --- --- --- --- --- --- --- --- --- --- --- --- ---'
+    WRITE(i_unit,'(A, A32)') '# Parameter file ', c_file
+    WRITE(i_unit,'(A, A15)') '# created automatically by program ', GRID_parameters%program_name
+    WRITE(i_unit,'(A)')      '# --- --- --- --- --- --- --- --- --- --- --- --- ---'
+    WRITE(i_unit,'(A,/,i8)')          'EXPERIMENT_NUMBER'         , p_param%num%i_experiment + 1
+    WRITE(i_unit,'(A,/,i8)')          'FINE_GRID_LEVEL'           , p_param%num%i_reflevel
+    WRITE(i_unit,'(A,/,i8)')          'COARSE_GRID_LEVEL'         , p_param%num%i_crslevel
+    WRITE(i_unit,'(A,/,e12.4)')       'TOLERANCE_OF_REFINEMENT'   , p_param%num%r_reftolerance
+    WRITE(i_unit,'(A,/,e12.4)')       'TOLERANCE_OF_COARSENING'   , p_param%num%r_crstolerance
+    WRITE(i_unit,'(A,/,e12.4)')       'WATERMARK_OF_REFINEMENT'   , p_param%num%r_refwatermark
+    WRITE(i_unit,'(A,/,e12.4)')       'WATERMARK_OF_COARSENING'   , p_param%num%r_crswatermark
+    WRITE(i_unit,'(A,/,i8)')          'BEGINNING_TIMESTEP'        , i_frsttimestep
+    WRITE(i_unit,'(A,/,e12.4)')       'TIMESTEPPING_START_TIME'   , r_starttime
+    IF(PRESENT(i_lasttimestep) .AND. .NOT.(PRESENT(r_finaltime))) THEN
+      WRITE(i_unit,'(A,/,e12.4)')       'TIMESTEP_LENGTH'           , p_param%num%r_deltatime
+      WRITE(i_unit,'(A,/,i8)')          'FINISHING_TIMESTEP'        , i_lasttimestep
+      WRITE(i_unit,'(A,/,i8)')          'STEPS_BTW_PLOTS'           , p_param%io%i_plotoffset
+    ELSE IF(.NOT. PRESENT(i_lasttimestep) .AND. (PRESENT(r_finaltime))) THEN
+      WRITE(i_unit,'(A,/,e12.4)')       'TIMESTEPPING_END_TIME'     , r_finaltime
+      WRITE(i_unit,'(A,/,e12.4)')       'TIME_BTW_PLOTS'            , p_param%io%r_plotint
+    END IF
+    WRITE(i_unit,'(A,/,i8)')          'ADAPT_REGION'              , p_param%num%i_refneigh
+    WRITE(i_unit,'(A,/,a32)')         'TIMESTEPPING'              , p_param%num%c_timestepping
+    WRITE(i_unit,'(A,/,e12.4)')       'MAX_CFL_NUMBER'            , p_param%num%r_cflmax
+    WRITE(i_unit,'(A,/,i8)')          'NETCDF_FILE_PLOTTING'      , i_netcdf
+    WRITE(i_unit,'(A,/,i8)')          'VTU_FILE_PLOTTING'         , i_para
+    WRITE(i_unit,'(A,/,i8)')          'ANASOL_PLOTTING'           , i_solplot
+    WRITE(i_unit,'(A,/,i8)')          'SUBTRIANG_PTS'             , p_param%io%i_subtriangpts
+    WRITE(i_unit,'(A,/,i8)')          'STEPS_BTW_SAVES'           , p_param%io%i_saveoffset
+    WRITE(i_unit,'(A,/,i8)')          'SAVE_FINISH_CONFIGURATION' , p_param%io%i_savelast
+    WRITE(i_unit,'(A,/,i8)')          'DIAGNOSTICS'               , i_diag
+    WRITE(i_unit,'(A,/,i8)')          'STEPS_BTW_DIAG'            , p_param%io%i_diagoffset
+    WRITE(i_unit,'(A,/,a32)')         'DOMAIN_FILE_NAME'          , p_param%io%c_domainfile
+    WRITE(i_unit,'(A,/,a32)')         'TRIANG_FILE_NAME'          , p_param%io%c_triangfile
+    WRITE(i_unit,'(A,/,i8)')          'NUM_SIGNATURE_FILES'       , p_param%io%i_numsigs
+    WRITE(i_unit,'(A)')               'SIGNATURE_FILE_NAMES'
+    DO i_cnt=1,p_param%io%i_numsigs
+      WRITE(i_unit,'(A)') p_param%io%c_sigfiles(i_cnt)(1:i_cln)
+    END DO
+
+!--- write equation specific parameters
+    CALL ioeqn_putinputfile(i_unit)
+
+!--- write test specific parameters
+    DO i_cnt=1, i_ntstintparam
+      WRITE(c_tmp, '(A, I0, A)') '(A,/,', p_testparam%tint(i_cnt)%i_size, 'i8)'
+      WRITE(i_unit, c_tmp) p_testparam%tint(i_cnt)%c_keyword, &
+                           p_testparam%tint(i_cnt)%p_value(1:p_testparam%tint(i_cnt)%i_size)
+    END DO
+    DO i_cnt=1, i_ntstrealparam
+      WRITE(c_tmp, '(A, I0, A)') '(A,/,', p_testparam%treal(i_cnt)%i_size, 'e12.4)'
+      WRITE(i_unit, c_tmp) p_testparam%treal(i_cnt)%c_keyword, &
+                           p_testparam%treal(i_cnt)%p_value(1:p_testparam%treal(i_cnt)%i_size)
+    END DO
+    DO i_cnt=1, i_ntstcharparam
+      WRITE(i_unit, '(A,/,a32)') p_testparam%tchar(i_cnt)%c_keyword, &
+                                 p_testparam%tchar(i_cnt)%p_value
+    END DO
+    DO i_cnt=1, i_ntstlogparam
+      WRITE(i_unit, '(A)') p_testparam%tlog(i_cnt)%c_keyword
+      IF (p_testparam%tlog(i_cnt)%p_value) THEN
+        WRITE(i_unit, '(I1)') 1
+      ELSE
+        WRITE(i_unit, '(I1)') 0
+      END IF
+    END DO
+
+    WRITE(i_unit,'(A)')      '# --- ---  End of parameter file  --- --- --- --- ---'
+
+!--- close file
+
+    CLOSE(i_unit)
+    IF(GRID_parameters%iolog > 0) &
+      WRITE(GRID_parameters%iolog,*) 'INFO: Closed file on unit: ', i_unit
+
+  END SUBROUTINE io_putinputfile
+
+!*******************************************************************************
+END MODULE IO_utils

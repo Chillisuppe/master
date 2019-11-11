@@ -1,0 +1,156 @@
+eulerTE-vortex: maincopy
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@cp DG_time_rosenbrock.F90 DG_timestepping.F90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp $(SRCDIR)/euler/DG_cfl.f90 DG_cfl.f90
+	@cp $(SRCDIR)/euler/DG_equation_TE_notWB.F90 DG_equation.F90
+	@cp $(SRCDIR)/euler/DG_boundary.F90 DG_boundary.F90
+	@cp $(SRCDIR)/euler/DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp $(SRCDIR)/euler/DG_initial_vortex.f90 DG_initial.f90
+	@cp $(SRCDIR)/euler/IO_equation.f90 IO_equation.f90
+	@$(MAKE) executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_1by1_period_fine.dat .
+	@cp $(DATDIR)/euler/Parameters_vortex_row.dat Parameters_vortex.dat
+
+eulerPT-vortex: maincopy
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp $(SRCDIR)/euler/DG_cfl.f90 DG_cfl.f90
+	@cp $(SRCDIR)/euler/DG_equation_PT.F90 DG_equation.F90
+	@cp $(SRCDIR)/euler/DG_boundary.F90 DG_boundary.F90
+	@cp $(SRCDIR)/euler/DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp $(SRCDIR)/euler/DG_initial_vortex.f90 DG_initial.f90
+	@cp $(SRCDIR)/euler/IO_equation.f90 IO_equation.f90
+	@$(MAKE) executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_1by1_period_fine.dat .
+	@cp $(DATDIR)/euler/Parameters_vortex.dat .
+
+eulerTE-simplewave: maincopy
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@cp $(SRCDIR)/euler/DG_cfl.f90 DG_cfl.f90
+	@cp $(SRCDIR)/euler/DG_equation_TE.F90 DG_equation.F90
+	@cp $(SRCDIR)/euler/DG_boundary.F90 DG_boundary.F90
+	#@cp $(SRCDIR)/euler/DG_limiter_shu.F90 DG_limiter.F90
+	@cp $(SRCDIR)/euler/DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp $(SRCDIR)/euler/DG_initial_simplewave.f90 DG_initial.f90
+	@cp $(SRCDIR)/euler/IO_equation.f90 IO_equation.f90
+	@$(MAKE) executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_1by1_period_fine.dat .
+	@cp $(DATDIR)/euler/Parameters_simplewave.dat .
+
+eulerPT-simplewave: maincopy
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp $(SRCDIR)/euler/DG_cfl.f90 DG_cfl.f90
+	@cp $(SRCDIR)/euler/DG_equation_PT.F90 DG_equation.F90
+	@cp $(SRCDIR)/euler/DG_boundary.F90 DG_boundary.F90
+	@cp $(SRCDIR)/euler/DG_limiter_shu.F90 DG_limiter.F90
+	@cp $(SRCDIR)/euler/DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp $(SRCDIR)/euler/DG_initial_simplewave.f90 DG_initial.f90
+	@cp $(SRCDIR)/euler/IO_equation.f90 IO_equation.f90
+	@$(MAKE) executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_1by1_period_fine.dat .
+	@cp $(DATDIR)/euler/Parameters_simplewave.dat .
+
+eulerTE-atmosphereatrest: maincopy
+# 	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_flux_weak.F90 DG_flux.F90
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+# 	@cp DG_time_rosenbrock.F90 DG_timestepping.F90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp $(SRCDIR)/euler/DG_cfl.f90 DG_cfl.f90
+	@cp $(SRCDIR)/euler/DG_equation_TE.F90 DG_equation.F90
+# 	@cp $(SRCDIR)/euler/DG_boundary_atmatrest.F90 DG_boundary.F90
+	@cp $(SRCDIR)/euler/DG_boundary_atmatrest_chandra.F90 DG_boundary.F90
+	@cp $(SRCDIR)/euler/DG_RS_rusanov.F90 DG_riemann_solver.F90
+# 	@cp $(SRCDIR)/euler/DG_initial_atmosphereatrest.f90 DG_initial.f90
+	@cp $(SRCDIR)/euler/DG_initial_atmosphereatrest_chandra.f90 DG_initial.f90
+	@cp $(SRCDIR)/euler/IO_equation.f90 IO_equation.f90
+	@$(MAKE) executable
+	@cp $(DATDIR)/dg_linear.ftf .
+# 	@cp $(DATDIR)/euler/Triang_atmosphere.dat .
+	@cp $(DATDIR)/euler/Triang_atmosphere_chandra.dat Triang_atmosphere.dat
+	@cp $(DATDIR)/euler/Parameters_atmosphereatrest_chandra.dat Parameters_atmosphereatrest.dat
+# 	@cp $(DATDIR)/euler/Parameters_atmosphereatrest.dat .
+
+eulerTE-atmosphereatrest_bg: maincopy
+# 	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_flux_weak.F90 DG_flux.F90
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+# 	@cp DG_time_rosenbrock.F90 DG_timestepping.F90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp $(SRCDIR)/euler/background_state/DG_cfl.f90 DG_cfl.f90
+	@cp $(SRCDIR)/euler/background_state/DG_equation_TE.F90 DG_equation.F90
+	@cp $(SRCDIR)/euler/background_state/DG_boundary_atmatrest.F90 DG_boundary.F90
+	@cp $(SRCDIR)/euler/background_state/DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp $(SRCDIR)/euler/background_state/DG_initial_atmosphereatrest.f90 DG_initial.f90
+	@cp $(SRCDIR)/euler/IO_equation.f90 IO_equation.f90
+	@$(MAKE) executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/euler/Triang_atmosphere.dat .
+	@cp $(DATDIR)/euler/Parameters_atmosphereatrest.dat Parameters_atmosphereatrest.dat
+
+eulerPT-atmosphereatrest: maincopy
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp $(SRCDIR)/euler/DG_cfl.f90 DG_cfl.f90
+	@cp $(SRCDIR)/euler/DG_equation_PT.F90 DG_equation.F90
+	@cp $(SRCDIR)/euler/DG_boundary_atmatrest.F90 DG_boundary.F90
+	@cp $(SRCDIR)/euler/DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp $(SRCDIR)/euler/DG_initial_atmosphereatrest.f90 DG_initial.f90
+	@cp $(SRCDIR)/euler/IO_equation.f90 IO_equation.f90
+	@$(MAKE) executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/euler/Triang_atmosphere.dat .
+	@cp $(DATDIR)/euler/Parameters_atmosphereatrest.dat .
+
+eulerTE-warmairbubble: maincopy
+# 	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_flux_weak.F90 DG_flux.F90
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_time_rosenbrock.F90 DG_timestepping.F90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp $(SRCDIR)/euler/DG_cfl.f90 DG_cfl.f90
+	@cp $(SRCDIR)/euler/DG_equation_TE.F90 DG_equation.F90
+	@cp $(SRCDIR)/euler/DG_boundary.F90 DG_boundary.F90
+# 	@cp $(SRCDIR)/euler/DG_limiter_shu.F90 DG_limiter.F90
+	@cp $(SRCDIR)/euler/DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp $(SRCDIR)/euler/DG_initial_warmairbubble.f90 DG_initial.f90
+	@cp $(SRCDIR)/euler/IO_equation.f90 IO_equation.f90
+	@$(MAKE) executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/euler/Triang_warmairbubble.dat .
+	@cp $(DATDIR)/euler/Parameters_warmairbubble.dat .
+
+eulerPT-warmairbubble: maincopy
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp $(SRCDIR)/euler/DG_cfl.f90 DG_cfl.f90
+	@cp $(SRCDIR)/euler/DG_equation_PT.F90 DG_equation.F90
+	@cp $(SRCDIR)/euler/DG_boundary.F90 DG_boundary.F90
+	@cp $(SRCDIR)/euler/DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp $(SRCDIR)/euler/DG_initial_warmairbubble.f90 DG_initial.f90
+	@cp $(SRCDIR)/euler/IO_equation.f90 IO_equation.f90
+	@$(MAKE) executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/euler/Triang_warmairbubble.dat .
+	@cp $(DATDIR)/euler/Parameters_warmairbubble.dat .
+

@@ -1,0 +1,22 @@
+#-----------------------------------------------------------
+# Test cases for shallow water equations
+#-----------------------------------------------------------
+
+#-----------------------------------------------------------
+# Test cases from "Shock-Capturing Methods for Free-Surface
+#                  Shallow Flows", Toro 2001 (page 120)
+#-----------------------------------------------------------
+toro: maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_full.f90 DG_cfl.f90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp DG_limiter_KuSV.F90 DG_limiter.F90
+	@cp DG_RS_exact.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_initial_riemannproblem.f90 DG_initial.f90
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@make executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_channel50.dat .
+	@cp $(DATDIR)/Parameters_toro?.dat .
+	@cp $(DATDIR)/gausspoints/gausspoints02.dat .

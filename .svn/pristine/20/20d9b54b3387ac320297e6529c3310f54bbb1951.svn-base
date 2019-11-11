@@ -1,0 +1,312 @@
+!*******************************************************************************
+!
+!> @file  DG_RS_exact.F90
+!> @brief contains module DG_riemann_solver
+!
+!> @author Nicole Beisiegel, Stefan Vater
+!
+!*******************************************************************************
+! MODULE DESCRIPTION:
+!> @brief computes exact or approximate solution of Riemann problem
+!
+MODULE DG_riemann_solver
+
+  USE GRID_api
+  USE DG_equation, ONLY : flux, velocity
+
+  PRIVATE :: swguess, swfunc1, swfunc2
+  PUBLIC  :: riemannsolver
+
+  CONTAINS
+
+!*******************************************************************************
+! DESCRIPTION of [FUNCTION riemannsolver]:
+!> @brief exact Riemann solver for shallow water equations
+!>
+!> @param[in]     r_Q_l           left state vector (fluid depth, momentum in x-, momentum in y-direction)
+!> @param[in]     r_Q_r           right state vector (fluid depth, momentum in x-, momentum in y-direction)
+!> @param[in]     r_normal        normal vector pointing from left to right element
+!> @return                        solution of Riemann problem
+!>
+!> @note This is still not totally correct. Probably the sevond momentum component
+!>       is not correct, yet!
+!>
+  FUNCTION riemannsolver(r_Q_l, r_Q_r, r_normal_l) RESULT(r_flux)
+
+    IMPLICIT NONE
+
+    REAL (KIND = GRID_SR), DIMENSION(3)                           :: r_flux
+    REAL (KIND = GRID_SR), DIMENSION(:), INTENT(IN)               :: r_Q_l, r_Q_r
+    REAL (KIND = GRID_SR), DIMENSION(GRID_DIMENSION), INTENT(IN)  :: r_normal_l
+
+    INTEGER (KIND = GRID_SI)                                      :: i_it
+    REAL (KIND = GRID_SR)                                         :: r_S_l, r_S_r, &
+      r_u_l, r_u_r, r_v_l, r_v_r, r_h_l, r_h_r, r_a_l, r_a_r, r_qk_r, r_qk_l, &
+      r_un_l, r_un_r, r_ut_l, r_ut_r, r_S_headl, r_S_headr, r_S_taill, r_S_tailr, &
+      r_h_star, r_u_star, r_v_star, r_a_star, r_Delta_u, r_Delta_u_crit, r_Delta_h, &
+      r_h0, r_u0, r_tol, r_wettol, r_h_guess, r_f, r_df
+    REAL (KIND = GRID_SR), DIMENSION(3,2)                         :: r_flux_exact
+
+!--- initialize quantities
+    r_tol    = 1E-10
+    r_wettol = 1E-8
+
+    r_h_l = r_Q_l(1)
+    r_h_r = r_Q_r(1)
+
+    r_u_l = velocity(r_Q_l(1), r_Q_l(2))
+    r_v_l = velocity(r_Q_l(1), r_Q_l(3))
+
+    r_u_r = velocity(r_Q_r(1), r_Q_r(2))
+    r_v_r = velocity(r_Q_r(1), r_Q_r(3))
+
+!--- rotate velocity
+    r_un_l =  r_u_l*r_normal_l(1) + r_v_l*r_normal_l(2)
+    r_un_r =  r_u_r*r_normal_l(1) + r_v_r*r_normal_l(2)
+    r_ut_l = -r_u_l*r_normal_l(2) + r_v_l*r_normal_l(1)
+    r_ut_r = -r_u_r*r_normal_l(2) + r_v_r*r_normal_l(1)
+
+!--- compute sound speeds
+    r_a_l = SQRT(r_h_l)
+    r_a_r = SQRT(r_h_r)
+
+    r_S_headl = r_un_l - r_a_l
+    r_S_taill = r_un_l + 2.0_GRID_SR*r_a_l
+    r_S_headr = r_un_r + r_a_r
+    r_S_tailr = r_un_r - 2.0_GRID_SR*r_a_r
+
+    IF ((r_h_l > r_wettol) .AND. (r_h_r > r_wettol)) THEN
+      r_Delta_u      = r_un_r-r_un_l
+      r_Delta_u_crit = 2.0_GRID_SR*(r_a_l+r_a_r)
+
+      IF (r_Delta_u >= r_Delta_u_crit) THEN
+        ! data produces vacuum, dry bed in the middle
+        IF (0.0 < r_S_headl) THEN
+          r_h0 = r_h_l
+          r_u0 = r_un_l
+        ELSEIF (0.0 < r_S_taill) THEN
+          r_h0 = (r_un_l + 2.0_GRID_SR*r_a_l)**2 / 9.0_GRID_SR
+          r_u0 = (r_un_l + 2.0_GRID_SR*r_a_l) / 3.0_GRID_SR / r_h0 * GRID_GRAV
+        ELSEIF (0.0 < r_S_tailr) THEN
+          r_h0 = 0.0_GRID_SR
+          r_u0 = 0.0_GRID_SR
+        ELSEIF (0.0 < r_S_headr) THEN
+          r_h0 = (-r_un_r + 2.0_GRID_SR*r_a_r)**2 / 9.0_GRID_SR
+          r_u0 = ( r_un_r - 2.0_GRID_SR*r_a_r) / 3.0_GRID_SR / r_h0 * GRID_GRAV
+        ELSE
+          r_h0 = r_h_r
+          r_u0 = r_un_r
+        END IF
+      ELSE ! r_Delta_u >= r_Delta_u_crit
+        ! two rarefaction guess
+        r_Delta_h = r_tol + 1.0_GRID_SR
+        r_h_guess = swguess(r_h_l, r_un_l, r_h_r, r_un_r)
+        i_it = 0
+        DO WHILE ((r_Delta_h > r_tol) .AND. (i_it < 100))
+          r_f  = swfunc1(r_h_guess,r_h_l) + swfunc1(r_h_guess,r_h_r) + r_Delta_u
+          r_df = swfunc2(r_h_guess,r_h_l) + swfunc2(r_h_guess,r_h_r)
+          r_h_star = r_h_guess - r_f/r_df
+          r_u_star = 0.5_GRID_SR*(r_un_l+r_un_r) + &
+                     0.5_GRID_SR*(swfunc1(r_h_star,r_h_r) - swfunc1(r_h_star,r_h_l))
+          r_a_star = SQRT(r_h_star)
+          r_Delta_h = 2.0_GRID_SR*ABS(r_h_star-r_h_guess)/(r_h_star+r_h_guess)
+          i_it = i_it + 1
+          r_h_guess = r_h_star
+        END DO
+!         PRINT *, "h_star  = ", r_h_star/GRID_GRAV
+!         PRINT *, "hu_star = ", r_h_star/GRID_GRAV*r_u_star
+
+        IF (0.0 < r_u_star) THEN
+          IF (r_h_star <= r_h_l) THEN
+            ! left rarefaction wave
+            r_S_taill = r_u_star - r_a_star
+            IF (0.0 < r_S_headl) THEN
+              r_h0 = r_h_l
+              r_u0 = r_un_l
+            ELSEIF (0.0 <= r_S_taill) THEN
+              r_h0 = (r_un_l + 2.0_GRID_SR*r_a_l)**2 / 9.0_GRID_SR
+              r_u0 = (r_un_l + 2.0_GRID_SR*r_a_l) / 3.0_GRID_SR / r_h0 * GRID_GRAV
+            ELSE
+              r_h0 = r_h_star
+              r_u0 = r_u_star
+            END IF
+          ELSE
+            ! left shock wave
+            r_qk_l = SQRT(0.5_GRID_SR*((r_h_star+r_h_l)*r_h_star/r_h_l**2))
+            r_S_l  = r_un_l - r_a_l*r_qk_l
+            IF (0.0 < r_S_l) THEN
+              r_h0 = r_h_l
+              r_u0 = r_un_l
+            ELSE
+              r_h0 = r_h_star
+              r_u0 = r_u_star
+            END IF
+          END IF ! r_h_star <= r_h_l
+        ELSE ! 0 < r_u_star
+          IF (r_h_star <= r_h_r) THEN
+            ! right rarefaction wave
+            r_S_tailr = r_u_star + r_a_star
+            IF (0.0 > r_S_headr) THEN
+              r_h0 = r_h_r
+              r_u0 = r_un_r
+            ELSEIF (0.0 >= r_S_tailr) THEN
+              r_h0 = (-r_un_r + 2.0_GRID_SR*r_a_r)**2 / 9.0_GRID_SR
+              r_u0 = ( r_un_r - 2.0_GRID_SR*r_a_r) / 3.0_GRID_SR / r_h0 * GRID_GRAV
+            ELSE
+              r_h0 = r_h_star
+              r_u0 = r_u_star
+            END IF
+          ELSE
+            ! right shock wave
+            r_qk_r = SQRT(0.5_GRID_SR*((r_h_star+r_h_r)*r_h_star/r_h_r**2))
+            r_S_r  = r_un_r + r_a_r*r_qk_r
+            IF (0.0 > r_S_r) THEN
+              r_h0 = r_h_r
+              r_u0 = r_un_r
+            ELSE
+              r_h0 = r_h_star
+              r_u0 = r_u_star
+            END IF
+          END IF ! r_h_star <= r_h_r
+        END IF ! 0 < r_u_star
+      END IF ! r_Delta_u >= r_Delta_u_crit
+    ELSEIF ((r_h_l <= r_wettol) .AND. (r_h_r > r_wettol)) THEN
+      ! dry bed region on the left
+      IF (0.0 > r_S_headr) THEN
+        r_h0 = r_h_r
+        r_u0 = r_un_r
+      ELSEIF (0.0 > r_S_tailr) THEN
+        r_h0 = (-r_un_r + 2.0_GRID_SR*r_a_r)**2 / 9.0_GRID_SR
+        r_u0 = ( r_un_r - 2.0_GRID_SR*r_a_r) / 3.0_GRID_SR / r_h0 * GRID_GRAV
+      ELSE
+        r_h0 = 0.0_GRID_SR
+        r_u0 = 0.0_GRID_SR
+      END IF ! 0 > r_S_headr
+    ELSEIF ((r_h_r <= r_wettol) .AND. (r_h_l > r_wettol)) THEN
+      ! dry bed region on the right
+      IF (0.0 < r_S_headl) THEN
+        r_h0 = r_h_l
+        r_u0 = r_un_l
+      ELSEIF (0.0 < r_S_taill) THEN
+        r_h0 = (r_un_l + 2.0_GRID_SR*r_a_l)**2 / 9.0_GRID_SR
+        r_u0 = (r_un_l + 2.0_GRID_SR*r_a_l) / 3.0_GRID_SR / r_h0 * GRID_GRAV
+      ELSE
+        r_h0 = 0.0_GRID_SR
+        r_u0 = 0.0_GRID_SR
+      END IF
+    ELSE
+      r_h0 = 0.0_GRID_SR
+      r_u0 = 0.0_GRID_SR
+    END IF
+
+!--- treat second velocity component as passive scalar
+    IF (r_u_star >= 0.0) THEN
+      r_v_star = r_ut_l
+    ELSE
+      r_v_star = r_ut_r
+    END IF
+
+!     PRINT *, "Riemann state: " r_h0/GRID_GRAV, r_h0/GRID_GRAV*r_u0, r_h0/GRID_GRAV*r_v_star
+
+!--- compute the flux
+    r_flux_exact = flux([r_h0, r_h0*r_u0, r_h0*r_v_star])
+
+    r_flux(1) = r_flux_exact(1,1)
+    r_flux(2) = r_flux_exact(2,1)*r_normal_l(1) - r_flux_exact(3,1)*r_normal_l(2)
+    r_flux(3) = r_flux_exact(2,1)*r_normal_l(2) + r_flux_exact(3,1)*r_normal_l(1)
+
+  END FUNCTION riemannsolver
+
+!*******************************************************************************
+! DESCRIPTION of [FUNCTION swguess]:
+!> @brief
+!
+!> @param           r_hl
+!> @param           r_ul
+!> @param           r_hr
+!> @param           r_ur
+!
+  FUNCTION swguess(r_hl, r_ul, r_hr, r_ur)
+
+    IMPLICIT NONE
+
+    REAL (KIND = GRID_SR), INTENT(IN)         :: r_hl, r_ul, r_hr, r_ur
+    REAL (KIND = GRID_SR)                     :: swguess
+
+    REAL (KIND = GRID_SR)                     :: r_al, r_ar, r_minh, r_h0, r_gr, r_gl
+
+    r_al = SQRT(r_hl)
+    r_ar = SQRT(r_hr)
+
+!--- minimum of h
+    r_minh = MIN(r_hl, r_hr)
+
+!--- two rarefaction guess
+    swguess = (0.5_GRID_SR*(r_al+r_ar) + 0.25_GRID_SR*(r_ul-r_ur))**2
+
+    IF (swguess > r_minh) THEN
+!--- use two shock guess
+      r_h0 = swguess
+      r_gl = SQRT(0.5_GRID_SR * (r_h0+r_hl)/(r_h0*r_hl))
+      r_gr = SQRT(0.5_GRID_SR * (r_h0+r_hr)/(r_h0*r_hr))
+      swguess = (r_gl*r_hl + r_gr*r_hr + r_ul - r_ur)/(r_gl + r_gr)
+    END IF
+
+  END FUNCTION swguess
+
+!*******************************************************************************
+! DESCRIPTION of [FUNCTION swfunc1]:
+!> @brief
+!
+!> @param           r_h
+!> @param           r_hk
+!
+  FUNCTION swfunc1(r_h, r_hk)
+
+    IMPLICIT NONE
+
+    REAL (KIND = GRID_SR), INTENT(IN)         :: r_h, r_hk
+    REAL (KIND = GRID_SR)                     :: swfunc1
+
+    REAL (KIND = GRID_SR)                     :: r_a, r_ak
+
+    r_a  = SQRT(r_h)
+    r_ak = SQRT(r_hk)
+
+    IF (r_h <= r_hk) THEN
+      swfunc1 = 2.0_GRID_SR*(r_a-r_ak)
+    ELSE
+      swfunc1 = (r_h-r_hk)*SQRT(0.5_GRID_SR*((r_h+r_hk)/(r_h*r_hk)))
+    END IF
+
+  END FUNCTION swfunc1
+
+!*******************************************************************************
+! DESCRIPTION of [FUNCTION swfunc2]:
+!> @brief
+!
+!> @param           r_h
+!> @param           r_hk
+!
+  FUNCTION swfunc2(r_h, r_hk)
+
+    IMPLICIT NONE
+
+    REAL (KIND = GRID_SR), INTENT(IN)         :: r_h, r_hk
+    REAL (KIND = GRID_SR)                     :: swfunc2
+
+    REAL (KIND = GRID_SR)                     :: r_gk, r_a
+
+    r_a = SQRT(r_h)
+
+    IF (r_h <= r_hk) THEN
+      swfunc2 = 1.0_GRID_SR / r_a
+    ELSE
+      r_gk    = SQRT(0.5_GRID_SR*(r_h+r_hk) / (r_h * r_hk))
+      swfunc2 = r_gk - (r_h-r_hk) / (4.0_GRID_SR * r_h**2 * r_gk)
+    END IF
+
+  END FUNCTION swfunc2
+
+!*******************************************************************************
+END MODULE DG_riemann_solver

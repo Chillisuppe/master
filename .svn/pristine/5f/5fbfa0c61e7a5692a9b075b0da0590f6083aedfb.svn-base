@@ -1,0 +1,105 @@
+#-----------------------------------------------------------
+# Input file for batch mode input
+# input is controlled via keywords
+#
+# j. behrens 12/96
+#-----------------------------------------------------------
+# the experiment no. (0 for a new experiment)     [integer]
+EXPERIMENT_NUMBER
+0
+# desired maximum level of refinements            [integer]
+FINE_GRID_LEVEL
+9
+# minimum level of refinements                    [integer]
+COARSE_GRID_LEVEL
+9
+# tolerance for refinement                        [real]
+TOLERANCE_OF_REFINEMENT
+0.9
+# tolerance for coarsening                        [real]
+TOLERANCE_OF_COARSENING
+0.1
+# watermark for refinement                        [real]
+WATERMARK_OF_REFINEMENT
+0.01
+# watermark for coarsening                        [real]
+WATERMARK_OF_COARSENING
+0.01
+# timestep length                                 [real]
+TIMESTEP_LENGTH
+0.0005
+# timestepping scheme (euler, rk22, rk33, rk34, rk35)  [character]
+TIMESTEPPING
+rk22
+# first timestep                                  [integer]
+BEGINNING_TIMESTEP
+1
+# last timestep                                   [integer]
+FINISHING_TIMESTEP
+1000
+# size of cell neighborhood to be additionally refined [integer]
+ADAPT_REGION
+0
+# plot in NetCDF style to file (no plot = 0)      [integer]
+NETCDF_FILE_PLOTTING
+0
+# equidist. subtriang pts per edge (default: 2)   [integer]
+SUBTRIANG_PTS
+2
+# plot in vtu style for paraview (no plot = 0)    [integer]
+VTU_FILE_PLOTTING
+1
+# plot analytic solution to file (no plot = 0)    [integer]
+ANASOL_PLOTTING
+0
+# timesteps between plots                         [integer]
+STEPS_BTW_PLOTS
+10
+# timesteps between saves                         [integer]
+STEPS_BTW_SAVES
+500
+# diagnostics (on = 1, off = 0)                   [integer]
+DIAGNOSTICS
+1
+# steps between diagnostics                       [integer]
+STEPS_BTW_DIAG
+10
+# save last timestep for next experiment (no = 0) [integer]
+SAVE_FINISH_CONFIGURATION
+0
+# file defining the initial triangulation         [character]
+TRIANG_FILE_NAME
+Triang_dambreak.dat
+# number of signature files provided              [integer]
+NUM_SIGNATURE_FILES
+1
+# signature file name                             [character]
+SIGNATURE_FILE_NAME
+dg_linear.ftf
+#-----------------------------------------------------------
+# equation specific parameters
+#-----------------------------------------------------------
+# viscosity                                       [real]
+VISCOSITY
+0.5
+# bottom friction                                 [real]
+BOTTOM_FRIC
+0.0
+# wind friction                                   [real]
+WIND_FRIC
+0.0
+# bathymetric depth (uniform) of the basin        [real]
+BATHY_PARAM_DEPTH
+1.0
+#-----------------------------------------------------------
+# test specific parameters
+#-----------------------------------------------------------
+# initial fluid depth within reservoir
+DEPTH_RESERV
+0.6
+# initial fluid depth outside reservoir
+DEPTH_OUTSIDE
+0.05
+#-----------------------------------------------------------
+# END OF FILE
+#-----------------------------------------------------------

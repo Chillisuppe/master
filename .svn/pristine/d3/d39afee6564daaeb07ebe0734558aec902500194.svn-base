@@ -1,0 +1,135 @@
+##################################################################
+#   STORMFLASH                                                   #
+#   Adaptive STORM surge model based on the                      #
+#   FLexible Adaptive Semi-Lagrangian Hack                       #
+#   written in Fortran 90                                        #
+##################################################################
+
+# MACHINE
+MACHINE = linux_g64
+
+# SET MAKETHING CORRESPONDING TO MACHINE
+MAKETHING = DGM
+
+# OPTIMIZATION SETTINGS [debug|norm|opt]
+MODE := opt
+
+# FURTHER OPTIONS
+DBL_DBL    := yes
+
+# OpenMP Parallelization
+OMP:= no
+
+# LIBRARY SETTINGS [yes|no]
+# Usage: $(MAKE) USE_NETCDF=yes
+USE_NETCDF := yes
+
+# SET MAIN DIRECTORY PATH
+# !! This has to be alterd by user !!
+ROOTDIR = $(HOME)/clients
+
+# SET atlas/blas DIRECTORY PATH
+# !! This has to be alterd by user !!
+BLASLIB = -L/usr/lib/ -lblas
+
+# SET LAPACK DIRECTORY PATH/BLAS INCLUDED IN INTEL MKL
+# !! This has to be alterd by user !!
+# LAPACKLIB = -L/usr/lib64 -llapack -lpthread -lc -L$(ROOTDIR)/amatos2d/3rdparty/LAPACK95 -llapack95
+LAPACKLIB = -L/usr/lib/ -llapack -lc
+LAPACKINC =
+
+# SET NETCDF PATHS
+NETCDFLIB =
+NETCDFINC =
+NCUGRIDLIB =
+ifeq ($(strip $(USE_NETCDF)), yes)
+  NETCDFLIB = -L/usr/local/lib -lnetcdff -lnetcdf
+  NETCDFINC = -I/usr/local/include
+  NCUGRIDLIB = -lncugrid
+endif
+
+# SET MORE DIRECTORY PATHS
+LIBDIR  = $(ROOTDIR)/amatos2d/lib/$(MACHINE)
+INCDIR  = $(ROOTDIR)/amatos2d/compile/$(MACHINE)
+MODDIR  = $(ROOTDIR)/amatos2d/compile/$(MACHINE)
+AMATDIR = $(ROOTDIR)/amatos2d/compile/$(MACHINE)
+MAINDIR = $(ROOTDIR)/StormFlash2dgeneric
+
+SRCDIR  = $(MAINDIR)/src/flash
+SYSDIR  = $(MAINDIR)/src/system/gfortran
+TIMDIR  = $(MAINDIR)/src/timing
+DATDIR  = $(MAINDIR)/data
+BUILDIR = $(MAINDIR)/compile/$(MACHINE)
+
+# SET PATH TO GRID_API.mod
+AMATOS = $(MODDIR)/grid_api.mod
+
+# SET THE ENDING OF MODULE FILES
+MODEND = mod
+
+#----------------------------------------------------------------#
+# FLAGS FOR LINUX / Intel Fortran Compiler                       #
+#----------------------------------------------------------------#
+F90     = gfortran
+cc      = gcc
+CC      = g++
+LOADER  = gfortran
+
+# -------------- next for debugging -----------------------------#
+ifeq ($(strip $(MODE)),debug)
+#   FFLAGS  = -fbounds-check -ggdb -pg
+  FFLAGS  = -ggdb -pg -Wall -pedantic -fimplicit-none -fbounds-check -fbacktrace -ffree-line-length-none
+  CFLAGS  = -ggdb -pg
+  LDFLAGS = -ggdb -z nodefs -pg
+endif
+#--------------- paths for debugger -----------------------------#
+VPATH = $(AMATDIR),$(BUILDIR)
+
+# -------------- next for normal compilation --------------------#
+ifeq ($(strip $(MODE)),norm)
+  FFLAGS  =
+  CFLAGS  =
+  LDFLAGS = -z nodefs
+endif
+# -------------- next with aggresive optimization (Pentium M) ---#
+ifeq ($(strip $(MODE)),opt)
+  FFLAGS  = -O3 -march=native -ffree-line-length-none -funroll-loops -unroll
+  CFLAGS  = -O3
+  LDFLAGS = -O3
+endif
+
+#--------------- next for double precision etc. -----------------#
+ifeq ($(strip $(DBL_DBL)), yes)
+  FFLAGS += -DDBL_DBL
+endif
+
+#------------- Use OpenMP ---------------------------------------#
+ifeq ($(strip $(OMP)),yes)
+ LIBS    += -fopenmp
+ ##-lgomp -lpthread
+ FFLAGS  += -fopenmp
+ LDFLAGS += -fopenmp
+ CFLAGS  += -fopenmp
+endif
+
+# --------------------- include NetCDF or not -------------------#
+ifeq ($(strip $(USE_NETCDF)),yes)
+  FFLAGS += -DUSE_NETCDF
+endif
+
+# -------- next flag for using dummy graphics library -----------#
+LIBS = -L$(LIBDIR) -lamatos $(NCUGRIDLIB) $(NETCDFLIB) $(LAPACKLIB) \
+       $(BLASLIB) $(CCLIB)
+INCS = $(LAPACKINC) $(NETCDFINC) -I$(INCDIR) -I$(MODDIR)
+
+#----------------------------------------------------------------#
+# common stuff                                                   #
+#----------------------------------------------------------------#
+
+include $(MAINDIR)/compile/Makefiles/Makefile.common
+-include $(MAINDIR)/compile/Makefiles/dependency.mk
+-include $(MAINDIR)/compile/Makefiles/Makefile.euler
+-include $(MAINDIR)/compile/Makefiles/Makefile.Toro
+-include $(MAINDIR)/compile/Makefiles/Makefile.Testsuite
+-include $(MAINDIR)/compile/Makefiles/Makefile.unittests
+-include $(MAINDIR)/compile/Makefiles/Makefile.Thesis.Nicole

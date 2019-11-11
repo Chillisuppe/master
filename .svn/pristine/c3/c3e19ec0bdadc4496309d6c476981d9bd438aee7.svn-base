@@ -1,0 +1,34 @@
+#----------------------------------------------------------------
+# Rupture model: Subfault-Parameters taken from the actual paper
+# Reference: Hirata et al. (2006): The 2004 Indian Ocean tsunami: Tsunami source
+#            model from satellite altimetry. Earth Planets Space, 58, pp. 195-201,
+#            DOI: 10.1186/BF03353378
+# URL: earth-planets-space.springeropen.com/articles/10.1186/BF03353378
+#----------------------------------------------------------------
+# Comments: The positions have been transformed to the middle of the subfault
+#           (from bottom left corner)
+#----------------------------------------------------------------
+# Collected and translated for StormFlash2d by:
+# Michel Baensch, Stefan Vater (stefan.vater@uni-hamburg.de)
+# Hamburg, 29.07.2016
+#----------------------------------------------------------------
+# Number of Faults
+NUM_FAULTS
+14
+# Now the FAULTS with the following parameters:
+# LAT       LON         depth(m)      slip(m)    rake(deg)    strike(deg)  dip(deg)   dummy1 dummy2 dummy3  Length(m)  Width(m)
+FAULT_PARAMETERS
+ 13.6307    92.8221     23023.6133     0.0       130.0          25.0       10.0       0.0    0.0    0.0     1.0e+5     1.5e+5
+ 12.7660    92.5550     23023.6133    27.2       120.0          15.0       10.0       0.0    0.0    0.0     1.0e+5     1.5e+5
+ 11.8810    92.3766     23023.6133    25.7       115.0          10.0       10.0       0.0    0.0    0.0     1.0e+5     1.5e+5
+ 10.9810    92.2243     23023.6133     6.1       115.0          10.0       10.0       0.0    0.0    0.0     1.0e+5     1.5e+5
+ 10.0431    92.1840     23023.6133    12.0       106.0           0.0       10.0       0.0    0.0    0.0     1.0e+5     1.5e+5
+  9.1517    92.2241     23023.6133     1.5        99.0         350.0       10.0       0.0    0.0    0.0     1.0e+5     1.5e+5
+  8.3224    92.4988     23023.6133    11.5        86.0         335.0       10.0       0.0    0.0    0.0     1.0e+5     1.5e+5
+  7.4960    92.8865     23023.6133     9.4        90.0         330.0       10.0       0.0    0.0    0.0     1.0e+5     1.5e+5
+  6.6717    93.2109     23023.6133    23.4       100.0         350.0       10.0       0.0    0.0    0.0     1.0e+5     1.5e+5
+  5.7800    93.4094     23023.6133    10.4       102.0         345.0       10.0       0.0    0.0    0.0     1.0e+5     1.5e+5
+  4.7937    93.6342     23023.6133    29.1       105.0         340.0       10.0       0.0    0.0    0.0     1.0e+5     1.5e+5
+  4.0460    93.9946     23023.6133    14.9       104.0         330.0       10.0       0.0    0.0    0.0     1.0e+5     1.5e+5
+  3.3639    94.5879     23023.6133     0.0        91.0         310.0       10.0       0.0    0.0    0.0     1.0e+5     1.5e+5
+  2.9061    95.3508     23023.6133    16.5        71.0         290.0       10.0       0.0    0.0    0.0     1.0e+5     1.5e+5

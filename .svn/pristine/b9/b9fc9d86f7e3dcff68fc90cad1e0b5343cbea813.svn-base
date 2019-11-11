@@ -1,0 +1,103 @@
+######################################################################
+#
+# FILENAME: dg_linear.ftf
+#
+# FUNCTION: definitions for fem type
+#
+# DESCRIPTION: This file contains the signature for the discontinuous
+#              Galerkin method
+#
+# VERSIONS: 1. 01.03.10 Matthias Ehrhardt, Frithjof Fehsenfeld
+#           2. extended for adaptivity, .. Nicole Beisiegel
+#
+######################################################################
+!--- name of fem/describing string (< 32 characters)
+SIGNATURE_DESCRIPTION
+constant DG elements
+!--- Order of finite element
+POLY_DEGREE
+  0
+!--- number of unknowns per vertex
+NODE_DOFS
+  0
+!--- number of unknowns per edge
+EDGE_DOFS
+  0
+!--- number of unknowns per face/interior
+ELMT_DOFS
+  1
+!--- number of quadrature points for corresponding (exact) quadrature scheme
+ELMT_QUADPOINTS
+  1
+!--- number of quadrature points for edge integration
+EDGE_QUADPOINTS
+  1
+!--- number of basis functions nonzero on a specific edge
+EDGE_PSINONZERO
+  1
+
+!--- face positions barycentric coordinates
+ELMT_DOFCOORDINATES
+1 0.33333333333333333 0.33333333333333333 0.33333333333333333
+
+!--- barycentric coordinates wrt edge of edge quadrature points
+EDGE_QUADCOORDINATES
+1 0.50000000000000000  0.50000000000000000
+
+!--- weights for the quadrature rule corresponding to edge quadrature points
+EDGE_QUADWEIGHTS
+1 2.0
+
+!--- nonzero basis function indices for reference edge
+EDGE_PSIINDEX
+1
+
+!--- basis function evaluations at edge quad points
+EDGE_PSIQUADPOINTS
+1 1.0
+
+!--- for each quadrature point the (3) barycentric coordinate of its position
+ELMT_QUADCOORDINATES
+1 0.33333333333333333 0.33333333333333333 0.33333333333333333
+
+!--- weights for the quadrature rule corresponding to element quadrature points
+ELMT_QUADWEIGHTS
+1 2.0
+
+!--- basis function evaluations at elmt quad points
+ELMT_PSIQUADPOINTS
+1 1.0
+
+!--- coefficients for polynomial quadrature of a scalar derivative
+!--- d psi/d xi at each unknown
+DPSIDXI_MATRIX
+ 0.0
+
+!--- coefficients for polynomial quadrature of a scalar derivative
+!--- d psi/d eta at each unknown
+DPSIDETA_MATRIX
+ 0.0
+
+!--- elemental mass matrix
+ELMT_MASSMATRIX
+ 2.0
+
+ELMT_VANDERMONDE
+ 1.0
+
+ELMT_INVVANDERMONDE
+ 1.0
+
+DOF_ROTATIONMATRIX
+1 1 1 1
+
+DOF_REFLECTIONMATRIX
+1 1 1
+
+!---- basis function evaluated at nodes of new triangle
+!---- first #dof rows for refinement others for coarsening
+ADAPT_PROLONGATION
+1.0000000000000000
+
+ADAPT_RESTRICTION
+0.5000000000000000

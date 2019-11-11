@@ -1,0 +1,653 @@
+\documentclass[a4paper, 10pt, DIV11]{scrartcl}
+
+\usepackage[utf8x]{inputenc}
+% \usepackage[T1]{fontenc}
+
+\usepackage[english]{babel}
+\usepackage[numbers,sort&compress]{natbib}
+\renewcommand{\bibfont}{\small}
+\setlength{\bibsep}{5pt}
+
+\usepackage{amssymb, graphicx, amsmath, amsthm}
+% \usepackage{makeidx}
+\usepackage{pdflscape, rotating}
+\usepackage{booktabs}
+\usepackage{authblk}
+\numberwithin{equation}{section}
+\renewcommand{\theequation}{\arabic{section}.\arabic{equation}}
+\renewcommand{\thesubsection}{\arabic{subsection}.}
+\usepackage{scrpage2}
+\pagestyle{scrheadings}
+\automark[subsection]{section}
+% \clearscrheadfoot \ihead{\pagemark} \chead{\leftmark} \ohead{} \ofoot{}
+% \cfoot{} \ifoot{}
+
+\usepackage[bookmarksnumbered=true,
+            colorlinks=false,
+            pdftitle={StormFlash2d: Test Suite},
+            pdfauthor={Susanne Beckers, Joern Behrens, Nicole Beisiegel and Stefan Vater},
+            pdfsubject={amatos - StormFlash2d},
+            ]{hyperref}
+
+\usepackage[draft]{fixme}
+\FXRegisterAuthor{nb}{nblong}{\color{blue}NB}
+\FXRegisterAuthor{sb}{sblong}{\color{green}SB}
+\FXRegisterAuthor{jb}{jblong}{\color{magenta}JB}
+\FXRegisterAuthor{sv}{svlong}{\color{cyan}SV}
+\fxusetheme{color}
+
+%Kein Absatzeinzug
+\setlength{\parindent}{0in}
+% \makeindex
+\setcounter{tocdepth}{2}
+% \pagestyle{empty}
+
+\newcommand{\fatvec}[1]{\boldsymbol{#1}}
+\newcommand{\Cx}{\fatvec{x}}
+\newcommand{\vu}{\fatvec{u}}
+\newcommand{\Aim}{\paragraph*{Aim:}}
+\newcommand{\Def}{\paragraph*{Definition:}}
+\renewcommand{\Check}{\paragraph*{To Check:}}
+\newcommand{\Ana}{\paragraph*{Analytical Solution:}}
+\newcommand{\Call}{\paragraph*{Call:}}
+\newcommand{\Num}{\paragraph*{Numerical Setup:}}
+
+\begin{document}
+
+\title{StormFlash2d: Test Suite}
+\author{\large Susanne Beckers, J\"orn Behrens, Nicole Beisiegel and Stefan Vater}
+\affil{\large University of Hamburg, KlimaCampus, Grindelberg 5, 20144 Hamburg}
+\date{\large \today}
+\maketitle
+
+\begin{abstract}
+\noindent This is the definition of all testcases that have been carried out with \texttt{StormFlash2d} to guarantee accuracy and efficiency. After defining the testcases that are currently
+implemented we show some obtained results that shall assure the reader of the functionality of the program.
+All the mentioned tests have to be run before checking modifications into the trunk.
+The stated quantities are in SI units if not stated otherwise and neglected to improve the readability.
+\end{abstract}
+
+\section*{General Tests}
+
+\subsection*{Preliminaries}
+Before compiling the test suite make sure that in your personal Makefile, the flag for DBL$\_$DBL (double precision) is set true. The created diagnostics file StormFlash2d$\_$diag.0000 contains information on error norms and relative mass etc.
+
+\subsection*{Checking results with python}
+If one wishes to create the plots for the testcases by python, the modules pyugrid and cell$\_$tree2d are necessary. To create either all plots or the plots presented in this documentation, the python scripts testsuite$\_$plot.py (for all plots) or testsuite$\_$docplot.py (documentation plots) have to be called - with the testsuite name as argument. Additionally, these scripts require the config file pylocal.cfg to be adjusted. As of now, the plot script will ask which case is to be plotted. If no argument or all is given, all test cases will be plotted, otherwise just the plots for the specified test case will be created.
+
+If two testsuite results are present, the results can be compared with the testsuite$\_$compare.py script, by giving two testsuite names as arguments. This script will compare all test cases and yield the $L_1$, $L_2$ and $L_\infty$ norms as result. If the norms are below a given tolerance (specified as argument after the testsuite names, default is $10^{-12}$). The compare script can be utilized to verify one's testsuite computations.
+
+If the python scripts are used for comparison or plot creation, the \textbf{to check} sections for each test case can be ignored.
+
+\subsection{Compilation of all modules}
+
+\Call make testcompile
+
+\Def This test tries to compile all Fortran90 files which are copied to the compile directory by \texttt{make maincopy}.
+
+\Check After the compilation process, a summary is printed, which files could not be compiled. Note that this can have different reasons; besides syntax errors, there can be also dependency errors, i.e., a module on which the file depends could not be compiled before (This is usually the last one if there are different versions of a module, e.g., different Riemann solvers).
+
+\section*{Definition of Testcases}
+
+All subsequent testcases can be run with one command in one sweep:\\[\baselineskip]
+\texttt{make testsuite}\\[\baselineskip]
+The results are then written to a newly created directory for further analysis. The name of the directory is \texttt{testsuiteYYYYMMDD-hhmmss}, where \texttt{YYYY}, \texttt{MM}, \texttt{DD} are the current year, month and day, and \texttt{hh}, \texttt{mm}, \texttt{ss} are the current hour, minute and second. The actual results are in subdirectories named after the particular testcases.
+
+\subsection{Wet/Dry Dambreak (shockdry)}
+
+\Aim Test model for simple Riemann problem (dambreak) including dry states.
+
+\Def We consider a rectangular channel $\Omega=[0,10]\times[0,2]$, without bathymetry and wind $\tau(\Cx, t) = b(\Cx) = 0 \mbox{ for } t\in[0,T]$, with transmissive boundaries at $x=10$ and reflecting boundaries everywhere else. We define the initial condition with an initially discontinuous fluid depth
+\begin{align*}
+  h  (\Cx, 0) &= \begin{cases} 0.25 & \mbox{for } x\leq 5\\ 0 & \mbox{otherwise}\end{cases}\\
+  \vu(\Cx, 0) &= \fatvec{0}
+\end{align*}
+The time integration is performed using a second-order Runge Kutta scheme (RK22) with a uniform timestep of $\Delta t = 0.01$ until a final time $T = 1.0$. Wetting and drying is treated using the nodal-based KuSV limiter.
+
+\Ana Since this is basically a one-dimensional problem, the analytical solution can be computed as follows ($v(\Cx, t)=0$ for $t\in[0,T]$):
+\begin{align*}
+  (h(\Cx, t),u(\Cx, t)) =
+  \begin{cases}
+    (0.25,0) & \frac{x-5}{t} < -\sqrt{0.25 g} \\
+    (\tfrac{1}{9 g}[2\sqrt{0.25 g} - \frac{x-5}{t}]^2, \tfrac{1}{3}[2\sqrt{0.25 g} + 2\frac{x-5}{t}]) &
+      -\sqrt{0.25 g} < \frac{x-5}{t} < 2\sqrt{0.25 g}\\
+    (0,0) & \mbox{otherwise}
+  \end{cases}
+\end{align*}
+\Check Compare with the analytical solution. Recommended procedure is to chose Paraview's plot over line ($x$-axis) option and compare the point values labeled height and solution.
+
+\begin{figure}
+% \begin{center}
+\includegraphics[width=0.33\textwidth]{figures/shockdry00000000.pdf}
+\includegraphics[width=0.33\textwidth]{figures/shockdry00000050.pdf}
+\includegraphics[width=0.33\textwidth]{figures/shockdry00000100.pdf}
+% \end{center}
+\caption{Height profile at $y=1.0$ at times $t=0.0$, $0.5$, $1.0$ for the wet/dry dambreak testcase. Analytical (blue) and numerical (orange) solution.}\label{fig:shockdry}
+\end{figure}
+
+\subsection{Dambreak with linear basis functions}
+
+\Aim Test model for simple Riemann problem (dambreak) with different limiting strategies.
+
+\Def In a rectangular channel $\Omega=[0,10]\times[0,2]$, the shallow water equations without source terms are applied to the following initial conditions (Riemann problem):
+\begin{align*}
+  h  (\Cx, 0) &= \begin{cases} 3 & \mbox{for } x\leq 5\\ 1 & \mbox{otherwise}\end{cases}\\
+  \vu(\Cx, 0) &= \fatvec{0}
+\end{align*}
+The simulations are run on a grid with $a \times b$ rectangles, which are divided into two triangles. A constant time step $\Delta t = XX$ is used until the final time $T_\textrm{max} = XX$. Heun's method is used for timestepping. The following limiting strategies are applied: no limiting, Kuzmin-Limiter \cite{Kuzmin2010}, Limiter by Cockburn and Shu \cite{Cockburn1998}, TBD: Giraldo, KuSV, BJSV
+
+\Ana Since this is basically a one-dimensional problem, the analytical solution can be computed ($v(\Cx, t)=0$ for $t\in[0,1]$):
+\begin{align*}
+  (h(\Cx, t),u(\Cx, t)) =
+    \begin{cases}
+      (3,0) & \frac{x-5}{t} < -\sqrt{3g} \\
+      (h_0(\frac{x-5}{t}), u_0(\frac{x-5}{t})) & -\sqrt{3g} < \frac{x-5}{t} < u^{\ast} - \sqrt{gh^{\ast}} \\
+      (h^{\ast}, u^{\ast}) & u^{\ast} - \sqrt{gh^{\ast}} < \frac{x-5}{t} < \sqrt{g \frac{(h^{\ast}+3)h^{\ast}}{18}}\\
+      (1,0) & \frac{x-5}{t} > \sqrt{g \frac{(h^{\ast}+3)h^{\ast}}{18}}
+    \end{cases}
+\end{align*}
+The intermediate states in the star region are
+\begin{equation*}
+  h^{\ast} = 1.84857660309, \qquad
+  u^{\ast} = 2.33295189900
+\end{equation*}
+And the rarefaction fan is given by
+\begin{equation*}
+h_0(\xi) = \frac{1}{g} \left( \frac{2\sqrt{3g} - \xi}{3} \right)^2, \qquad
+u_0(\xi) = \frac{2\sqrt{3g} + 2\xi}{3}
+\end{equation*}
+
+\Check Compare with the analytical solution and the solution from previous test runs (see figures \ref{fig:shocklin_none}, \ref{fig:shocklin_Kuzmin}, \ref{fig:shocklin_shu}).
+
+Recommended procedure is to chose Paraview's plot over line (x-axis) option and compare the pointvalues labeled height and solution.
+
+\begin{figure}
+\includegraphics[width=0.33\textwidth]{figures/shocknone00000000.pdf}
+\includegraphics[width=0.33\textwidth]{figures/shocknone00000080.pdf}
+\includegraphics[width=0.33\textwidth]{figures/shocknone00000160.pdf}
+ \caption{Fluid depth along $y=1$ at times $t=0.0$, $0.25$, $0.5$ for the dambreak testcase with linear basis functions and without limiting.
+ Depicted are the analytical (blue) and the numerical (orange) solution.}
+ \label{fig:shocklin_none}
+\end{figure}
+
+\begin{figure}
+\includegraphics[width=0.33\textwidth]{figures/shocknodal00000000.pdf}
+\includegraphics[width=0.33\textwidth]{figures/shocknodal00000080.pdf}
+\includegraphics[width=0.33\textwidth]{figures/shocknodal00000160.pdf}
+ \caption{Fluid depth along $y=1$ at times $t=0.0$, $0.25$, $0.5$ for the dambreak testcase with linear basis functions and with nodal limiting.
+ Depicted are the analytical (blue) and the numerical (orange) solution.}
+ \label{fig:shocklin_Kuzmin}
+\end{figure}
+
+
+\begin{figure}
+\includegraphics[width=0.33\textwidth]{figures/shockshu00000000.pdf}
+\includegraphics[width=0.33\textwidth]{figures/shockshu00000080.pdf}
+\includegraphics[width=0.33\textwidth]{figures/shockshu00000160.pdf}
+ \caption{Fluid depth along $y=1$ at times $t=0.0$, $0.5$, $1.0$ for the dambreak testcase with linear basis functions and with Cockburn and Shu limiting.
+ Depicted are the analytical (blue) and the numerical (orange) solution.}
+ \label{fig:shocklin_shu}
+\end{figure}
+
+\begin{figure}
+\includegraphics[width=0.33\textwidth]{figures/shockgiraldo00000000.pdf}
+\includegraphics[width=0.33\textwidth]{figures/shockgiraldo00000080.pdf}
+\includegraphics[width=0.33\textwidth]{figures/shockgiraldo00000160.pdf}
+ \caption{Fluid depth along $y=1$ at times $t=0.0$, $0.5$, $1.0$ for the dambreak testcase with linear basis functions and with Giraldo limiting.
+ Depicted are the analytical (blue) and the numerical (orange) solution.}
+ \label{fig:shocklin_giraldo}
+\end{figure}
+
+\begin{figure}
+\includegraphics[width=0.33\textwidth]{figures/shockBJSV00000000.pdf}
+\includegraphics[width=0.33\textwidth]{figures/shockBJSV00000080.pdf}
+\includegraphics[width=0.33\textwidth]{figures/shockBJSV00000160.pdf}
+ \caption{Fluid depth along $y=1$ at times $t=0.0$, $0.5$, $1.0$ for the dambreak testcase with linear basis functions and with BJSV limiting.
+ Depicted are the analytical (blue) and the numerical (orange) solution.}
+ \label{fig:shocklin_BJSV}
+\end{figure}
+
+\begin{figure}
+\includegraphics[width=0.33\textwidth]{figures/shockKuSV00000000.pdf}
+\includegraphics[width=0.33\textwidth]{figures/shockKuSV00000080.pdf}
+\includegraphics[width=0.33\textwidth]{figures/shockKuSV00000160.pdf}
+ \caption{Fluid depth along $y=1$ at times $t=0.0$, $0.5$, $1.0$ for the dambreak testcase with linear basis functions and with KuSV limiting.
+ Depicted are the analytical (blue) and the numerical (orange) solution.}
+ \label{fig:shocklin_KuSV}
+\end{figure}
+
+\subsection{Dambreak with quadratic basis functions and without limiting}
+
+\Aim Test model for simple Riemann problem (dambreak) using quadratic basis functions.
+
+\Def The initial conditions and exact solution are the same as for the dambreak with linear basis functions. The only difference is that quadratic basis functions are used for this testcase.
+
+\Check Compare with the analytical solution using the plot over line option in Paraview. The results should resemble \svnote{Piecewise quadratic solution is only approximated as linear one. Needs to be adjusted, or a comment.}
+
+\begin{figure}
+% \begin{center}
+\includegraphics[width=0.33\textwidth]{figures/shockquad00000000.pdf}
+\includegraphics[width=0.33\textwidth]{figures/shockquad00000200.pdf}
+\includegraphics[width=0.33\textwidth]{figures/shockquad00000400.pdf}
+% \end{center}
+\caption{Fluid depth along $y=1.0$ at times $t=0.0$, $0.25$, $0.5$ for the dambreak testcase with quadratic basis functions. Analytical (blue) and numerical (orange) solution.}\label{fig:shockquad}
+\end{figure}
+
+
+\subsection{Circulating Wind}
+
+\Call make wind
+
+\Def We consider the shallow water equations in a square domain $\Omega=[0,30]^2$ with linear bathymetry $b(x,y)= 60-(x+y)$, reflecting boundaries and initial conditions
+\begin{align*}
+h(\Cx, 0) &= x+y+80\\
+\vu(\Cx, 0) &= \fatvec{0}\\
+\boldsymbol\tau(\Cx, t) &= (0.8 , -0.8)^T  \qquad \forall t\in [0,100]
+\end{align*}
+and wind blowing constantly diagonal to the bathymetry.
+This testcase tests the correct implementation of the simple wind parameterization as well as the modeling of the bathymetry forcing. No limiter is needed for this testcase.
+
+\Ana For this problem, no analytical solution is available. However, a certain physical behavior is to be observed. After some time one should see a circular mixing behavior.
+
+\begin{figure}
+\begin{center}
+\includegraphics[width=0.42\linewidth]{figures/wind00004000.pdf}
+\includegraphics[width=0.42\linewidth]{figures/wind00008000.pdf}\\
+\includegraphics[width=0.42\linewidth]{figures/wind00012000.pdf}
+\includegraphics[width=0.42\linewidth]{figures/wind00016000.pdf}\\
+\end{center}
+\caption{Velocities $\vu$ for circulating wind at times $t=20$, $40$, $60$, $80$ from upper left to bottom right}\label{fig:wind}
+\end{figure}
+
+\Check Compare numerical results with figure \ref{fig:wind} using Paraview's glyph filter.
+
+\subsection{Sloping Beach}
+
+\Call make beach
+
+\Def The model domain $\Omega=[0,L]\times[0,W]$ is of length $L=13800$ and width $W=3450$, Manning's $n=0.01$ and we have parameters $\alpha=\frac{5}{13800}, \beta=6900$.
+\begin{align*}
+  h(\Cx, 0)  &= 5.05 - \alpha x \\
+  \vu(\Cx,0) &= 0\\
+  b(\Cx)     &= \alpha x
+\end{align*}
+The boundary conditions are reflecting on the two opposite walls at the top and bottom of the domain as well as on the right wall. On the remaining left wall we prescribe periodic tidal boundary conditions of the kind
+\begin{align*}
+  h_{bou} = 5 - 4\sin\left( \frac{\pi t}{43200} \right)^2
+\end{align*}
+This testcase tests the implementation of tidal boundary conditions in combination with the wetting and drying treatment. The explicit Runge Kutta time integration (RK22) is performed with a timestep of $\Delta t = 1.0$ until $T_\textrm{max} = 20000$.
+
+\begin{figure}
+  % \begin{center}
+  \includegraphics[width=0.33\textwidth]{figures/beach00000000.pdf}
+  \includegraphics[width=0.33\textwidth]{figures/beach00000400.pdf}
+  \includegraphics[width=0.33\textwidth]{figures/beach00000800.pdf}\\
+  \includegraphics[width=0.33\textwidth]{figures/beach00001200.pdf}
+  \includegraphics[width=0.33\textwidth]{figures/beach00001600.pdf}
+  \includegraphics[width=0.33\textwidth]{figures/beach00002000.pdf}
+  % \end{center}
+  \caption{Sloping beach testcase: Cell averages of total water height at times $t=0$, $4000$, $8000$, $12000$, $16000$, $20000$ from top left to bottom right.}
+  \label{fig:beach}
+\end{figure}
+
+\Ana There's no analytical solution for this testcase.
+
+\Check Compare the numerical solution at every few timesteps with the figure \ref{fig:beach}.
+
+
+\subsection{Paraboloid Basin}
+
+\Call make freebasin
+
+\Def We consider a domain $\Omega=[-4000,4000]^2$ with parabolic bottom topography given by
+\begin{equation*}
+  b(r) =  H_0 \frac{r^2}{a^2}
+\end{equation*}
+where $r = \sqrt{x^2 + y^2}$ and the initial fluid depth is
+\begin{equation*}
+  h_0(r) = \max\left\{ 0,
+    H_0 \left(\frac{\sqrt{1-A^2}}{1-A} - \frac{r^2 (1-A^2)}{a^2 (1-A)^2}\right)\right\}
+\end{equation*}
+where
+\begin{equation*}
+  A = \frac{a^4 - r_0^4}{a^4 + r_0^4}
+\end{equation*}
+$H_0 = 1$, $r_0 = 2000$, $a = 2500$. The initial velocity is set to zero. The boundary conditions are set to be reflecting, although this should not affect the simulation results.
+
+\Ana In the paper of Thacker \cite{Thacker1981} a general analytical solution is computed. Here we use a scaled setup proposed in \cite{Lynett2002}.
+
+\Check Compare numerical and analytical solution using Paraview's plot over line filter.
+
+\begin{figure}
+  % \begin{center}
+  \includegraphics[width=0.33\textwidth]{figures/freebasinnodal00000000.pdf}
+  \includegraphics[width=0.33\textwidth]{figures/freebasinnodal00000500.pdf}
+  \includegraphics[width=0.33\textwidth]{figures/freebasinnodal00001000.pdf}
+  % \end{center}
+  \caption{Paraboloid basin testcase: Surface elevation (top) and $x$-momentum at $y=0.0$ at times $t=0$, $1000$, $2000$, exact (blue) and numerical (orange) solution.}\label{fig:parabol}
+\end{figure}
+
+
+\subsection{Lake at Rest}
+
+\Call make wellbalanced
+
+\Def We consider a square domain $\Omega=[0,L]^2$ with parameters $L=30$, $\alpha=0.25$, a smooth bathymetry defined as
+\begin{align*}
+b(\Cx) = \frac{L}{6}\exp\left(\alpha\left(\left(x-\frac{L}{2}\right)^2+\left(y-\frac{L}{2}\right)^2\right)\right)
+\end{align*}
+and initial conditions:
+\begin{align*}
+h(\Cx, t)&= \frac{L}{3} - b(\Cx)\\
+u(\Cx, t) &= \fatvec{0} \qquad \mbox{ for all } t\in [0,T].\\
+\end{align*}
+
+The evolution is performed using an explicit second order Runge Kutta timestepping  (RK22) with a timestep of $\Delta t = 0.01$ until a final time of $T=40$.
+
+\begin{figure}
+\begin{center}
+\includegraphics[width=0.7\textwidth]{figures/wellbalanced00000000.pdf}
+\end{center}
+\caption{Lake At Rest testcase: Initial condition for the height profile at $y=15$.}\label{fig:lakeatrest}
+\end{figure}
+
+\Ana The analytical solution for this testcase is the steady state $h(\Cx, t)= \frac{L}{3} - b(\Cx)$, $u(\Cx, t) = \fatvec{0}$ for all $t\in [0,T], T\in\mathbb R_+$.
+
+\Check
+With this test we ensure that the discretization of the flux divergence and the source term are consistent and physical steady states are preserved.
+Therefore we compute maximal $L^2-$ and $L^{\infty}-$ errors over time until $T=40$.
+The obtained values should be comparable to \nbnote{Up to now this is only possible to run with the MiscDiagnostics branch}
+\begin{align*}
+\max_{t\in T} \| \phi(t) -\phi_h(t) \|_2 \leq  0.40701\cdot 10^{-13}, \quad & \max_{t\in T} \| (\phi\vu)(t) -(\phi\vu)_h(t) \|_2 \leq 0.65606 \cdot 10^{-12}, \\
+\max_{t\in T} \| \phi(t) -\phi_h(t) \|_{\infty} \leq 0.62172\cdot 10^{-14},\quad & \max_{t\in T} \| (\phi\vu)(t) -(\phi\vu)_h(t) \|_{\infty} \leq 0.65221\cdot10^{-13}.
+\end{align*}
+
+
+\subsection{Sinusoidal hump}
+
+\Call make hump
+
+\Def On the domain $\Omega = [0,2]\times[0,2]$ with periodic boundary conditions in $x$-direction and reflecting wall boundary conditions in $y$-direction the evolution of an initial sinusoidal hump is considered. The initial surface elevation is set to
+\begin{equation*}
+  h(x,y) = \tilde{h}(r) =
+  \begin{cases}
+    0.5 + h_d \cdot 0.5 \left( \cos(r \pi/r_m) + 1 \right)
+      & \text{for } 0 \leq r < r_m \\
+    0.5 & \text{otherwise}
+  \end{cases}
+\end{equation*}
+as function of the radius
+\begin{equation*}
+\textstyle
+  r = \sqrt{\left( x - 1 \right)^2 + \left( y - 0.5 \right)^2 }
+\end{equation*}
+with center point $(1, 0.5)$. The height of the hump is given by $h_d=0.1$ and its radius by $r_m=0.4$. The initial momentum is set to $(hu)(x,y,0) \equiv 0$ and the bottom topography to $b(x,y) \equiv 0$. The solution is integrated with time steps $\Delta t = 0.002$. No limiter is needed for this test case.
+
+\Ana There is no analytic solution to this test case. The following is an attempt of approximation: The 1D linear shallow water equations are taken as an approximation of the radial symmetric 2D nonlinear case. Namely,
+\begin{align*}
+ u_t+gh_x &= 0,\\
+ h_t+Hu_x &= 0
+\end{align*}
+in $\Omega=\mathbb{R}$. Here, gravity $g=9.81 \frac{m}{s^2}$ and $H=0.5m$ the average height of the fluid.
+The initial conditions model a sinusoidal hump of amplitude $0.1m$ and maximum at $x=0$ with no initial velocity to match the 2D case:
+
+\begin{eqnarray*}
+u(x,0) &=& 0,\\
+h(x,0) &=&
+  \begin{cases}
+    0.5+0.05\left(\cos\left(\frac{\Pi x}{0.4}\right)+1\right) &, 0\leq |x| < 0.4\\
+    0.5                                                       &, |x| \geq 0.4
+  \end{cases}
+\end{eqnarray*}
+
+After transformation to normal form a decoupled system of linear transport equations is obtained, solved, and re-transformed. This gives:
+\begin{align*}
+  u(x,t) &= \sqrt{\frac{g}{H}}
+    \begin{cases}
+      0.5+0.025\left(\cos\left(\frac{\Pi}{0.4}\left(x-t\sqrt{Hg}\right)\right)+\cos\left(\frac{\Pi}{0.4}\left(x+t\sqrt{Hg}\right)\right)+2\right)\\
+      0.5
+    \end{cases} \\
+  h(x,t) &=
+    \begin{cases}
+      0.5+0.05\left(\frac{1}{2}\cos\left(\frac{\Pi}{0.4}\left(x-t\sqrt{Hg}\right)\right)+\frac{1}{2}\cos\left(\frac{\Pi}{0.4}\left(x+t\sqrt{Hg}\right)\right)+1\right)\\
+      0.5
+    \end{cases}
+\end{align*}
+Now, for the hump test case on the x-periodic and y-reflecting domain $\Omega=[0,2]\times[0,2]$, it is of interest how long it takes for this kind of wave to travel two units: From the midpoint one
+unit to the boundary, being reflected or forwarded to the periodic partner, and one unit back to the middle.\\
+To compute the time dependent maximum at distance $x=2$ the height $h(2,t)$ is differentiated in direction of space and equalized to zero. This procedure gives for $t_{max}$
+\begin{equation*}
+  \sin\left(\frac{\Pi}{0.4}\left(2-t_{max}\sqrt{Hg}\right)\right)=-\sin\left(\frac{\Pi}{0.4}\left(2+t_{max}\sqrt{Hg}\right)\right)
+\end{equation*}
+and thus for $k\in\mathbb{N}$
+\begin{equation*}
+  t_{max}=\frac{(2k+1)0.2}{\sqrt{Hg}}.
+\end{equation*}
+Taking into consideration that $|x-t_{max}\sqrt{Hg}|<0.4$ forces $k=4$ for the leading wave.
+This means the temporal first maximum at $(x,y)=(1,1)$ after the initialization is obtained at approximately $t_{max}=\frac{0.8}{\sqrt{0.5\cdot 9.81}}s\approx 0.813s$  with an amplitude of $h_{max}\approx0,571m$.
+For time steps of size $\Delta t=0.002s$ the maximum is at step $406$.
+Numerics, however, give step $430$ ($\tilde{t}_{max}=0.860s$) as the time step of the maximum height $\tilde{h}_{max}=0.55154m$.\\
+The computations above do not include the idea of waves confronting reach other. It is only an approximation by a single running wave. This might be, besides the linearization, a reason for the differences.
+
+\Check This problem tests the correct advection of gravity waves and implementation of boundary conditions. Diagnostics check the maximal displacement at $(x,y)=(1,1)$ at time $\tilde{t}_{max}=0.860s$ and compare
+with reference solution $\tilde{h}_{max}=0.55154m$. Furthermore the cuts along $(x,1)$ and $(1,y)$ should be similar, therefore $\|h(x,1)-h(1,x)\|_1$ is computed.
+
+\begin{figure}
+\begin{center}
+\includegraphics[width=0.5\textwidth]{figures/hump00000000.pdf}%
+\includegraphics[width=0.5\textwidth]{figures/hump00000400.pdf}
+\end{center}
+\caption{Initial condition (left) and numerical solution at time $t_\mathrm{max} =0.002s\cdot 400= 0.800s$ (right) of the height $h$ in the sinusoidal hump testcase.}\label{fig:hump}
+\end{figure}
+
+
+\subsection{Advection of a quasi-stationary vortex}
+
+\Call make vortex
+
+\Def In this test a quasi-stationary vortex is advected in two space dimensions with flat bottom topography. It is adapted from \cite{Vater2013}. The vortex is defined in polar coordinates, where the tangential velocity $v_\theta(r)$ is given by
+\begin{equation*}
+  v_\theta(r) =
+  \begin{cases}
+    v_\mathrm{max} \dfrac{s \cdot r}{r_m^2-r^2} \cdot \sqrt{2 \exp\left(\dfrac{1}{r^2-r_m^2} \right)}
+      & \text{for } 0 \leq r < r_m \\
+    0 & \text{otherwise}
+  \end{cases}
+\end{equation*}
+as function of the radius
+\begin{equation*}
+\textstyle
+  r = \sqrt{\left( x - 2 \right)^2 + \left( y - 1 \right)^2 } \ .
+\end{equation*}
+which is defined as the distance from the point $(2, 1)$. The quantity $v_\mathrm{max}$ is the maximum tangential velocity within the vortex, and $r_m$ is the radius of the vortex. For the following computations, these parameters are set to $v_\mathrm{max} = 0.5$ and $r_m = 0.45$. Furthermore, the scaling factor is
+\begin{equation*}
+  s = \frac{|r_{vm}^2 - r_m^2|}{r_{vm} \sqrt{2 \exp(1/(r_{vm}^2-r_m^2))}}
+\end{equation*}
+where
+\begin{equation*}
+  r_{vm} = \frac{1}{2} \sqrt{-2 + 2 \sqrt{1 + 4 r_m^4}}
+\end{equation*}
+is the radius at which $v_\mathrm{max}$ is attained. Since $h$ is only defined up to a constant, $h_\mathrm{bg} = 1$ is chosen as background height. This results in the initial height field
+\begin{equation*}
+  h_0(x,y) =
+  \begin{cases}
+    h_\mathrm{bg} - \dfrac{v_\mathrm{max}^2 s^2}{g} \exp\left(\dfrac{1}{r^2-r_m^2} \right) &
+      \text{for } 0 \leq r < r_m \\
+    h_\mathrm{bg} & \text{otherwise}
+  \end{cases}
+\end{equation*}
+The vortex is advected in the $x$-direction with $(u_\mathrm{bg}, v_\mathrm{bg}) = (1,0)$, which defines the initial velocity field
+\begin{equation*}
+  u_0(x,y) = u_\mathrm{bg} - v_\theta(r) \sin \theta \quad \text{and} \quad
+  v_0(x,y) = v_\mathrm{bg} + v_\theta(r) \cos \theta
+\end{equation*}
+with $\theta = \arctan \left( (y - 2) / ( x - 1) \right)$.
+
+The computational domain is given by $\Omega = [0,4]\times[0,2]$ with periodic boundary conditions in both directions. The numerical solution is integrated until the final time $t_\mathrm{end} = 4$. At this time, the vortex has traveled once through the channel and the solution can be compared to the exact solution, which is identical to the initial data. The solution is computed on an adaptive grid with seven different levels.
+
+\Ana The analytical solution are the initial conditions translated by $t \cdot (u_\mathrm{bg}, v_\mathrm{bg})$, where $t$ is the model time. This is just a Galiei transformation.
+
+\Check This test should mainly test adaptivity and the periodic boundary condition. The final solution should look like figure \ref{fig:vortex}.
+
+\begin{figure}
+\begin{center}
+\includegraphics[width=0.48\textwidth]{figures/vortexstrong00000000.pdf}
+\includegraphics[width=0.48\textwidth]{figures/vortexstrong00004000.pdf}\\
+\end{center}
+\caption{Initial condition (left) and numerical solution at final simulation time $t=4$ (right) of the vortex testcase.}\label{fig:vortex}
+\end{figure}
+
+\subsection{Advection of a quasi-stationary vortex with the Euler equations}
+
+\Aim Check the correctness of the discretization for the Euler equations w.r.t.\ advection. Comparison with a known analytical solution.
+
+\Def On the unit square $\Omega = [0,1]^2$ with periodic boundary conditions, a quasi-stationary vortex is advected in diagonal direction. Since for the exact solution the initial conditions are only translated, the numerical result can be compared to the analytical one at all times. Here, the primary variables are either  density $\rho$, momentum $\rho\textbf{u}$ and total energy $\rho e$, or the total energy is replaced by potential temperature $\rho \Theta$.
+
+The vortex is defined in polar coordinates, with the vortex center being placed at $(x,y) = (0.5,0.5)$. As a result the radius ($r$) and angle $\theta$ are calculated by
+\begin{equation*}
+  r = \sqrt{(x-0.5)^2+(y-0.5)^2}
+\end{equation*}
+and
+\begin{equation*}
+  \theta = \arctan((y-0.5)/(x-0,5)) .
+\end{equation*}
+
+The density is set to 1 all throughout the domain and the velocity is initialized with
+\begin{equation*}
+  u_0(x,y) = u_\mathrm{bg} - v_\theta(r) \sin \theta \quad \text{and} \quad
+  v_0(x,y) = v_\mathrm{bg} + v_\theta(r) \cos \theta,
+\end{equation*}
+while the vortex is advected diagonally with $(u_\mathrm{bg}, v_\mathrm{bg}) = (1,1)$. The tangential velocity $v_\theta(r)$ is calculated by
+\begin{equation*}
+  v_\theta(r) =
+  \begin{cases}
+    v_\mathrm{max} \dfrac{s \cdot r}{r_m^2-r^2} \cdot \sqrt{2 \exp\left(\dfrac{1}{r^2-r_m^2} \right)}
+      & \text{for } 0 \leq r < r_m \\
+    0 & \text{otherwise}.
+  \end{cases}
+\end{equation*}
+
+The quantity $v_\mathrm{max}$ is the maximum tangential velocity within the vortex, and $r_m$ is the radius of the vortex. For the following computations, these parameters are set to $v_\mathrm{max} = 0.5$ and $r_m = 0.45$. Furthermore, the scaling factor is
+\begin{equation*}
+  s = \frac{|r_{vm}^2 - r_m^2|}{r_{vm} \sqrt{2 \exp(1/(r_{vm}^2-r_m^2))}}
+\end{equation*}
+where
+\begin{equation*}
+  r_{vm} = \frac{1}{2} \sqrt{-2 + 2 \sqrt{1 + 4 r_m^4}}
+\end{equation*}
+is the radius at which $v_\mathrm{max}$ is attained.
+
+The pressure is taken to be
+\begin{equation*}
+P = \begin{cases} P_0 - 2\rho v_\mathrm{max}^2s^2\exp\left(\dfrac{1}{r^2-r_m^2} \right) & 0 \leq r < r_m, \\
+    P_0 & \mathrm{otherwise}.
+    \end{cases}
+\end{equation*}
+$P_0$ is the background pressure field, which is set to 1 for all $(x,y)\in \Omega$.
+The energy representation can then be calculated by the previously declared variables:
+\begin{equation*}
+  \rho e = \dfrac{1}{2} \rho\textbf{u}\cdot\textbf{u} +  \dfrac{P}{(\gamma -1)}
+\end{equation*}
+or
+\begin{equation*}
+  \rho \Theta = \dfrac{P_0}{R} \left(\dfrac{P}{P_0}\right)^\frac{1}{\gamma},
+\end{equation*}
+where $\gamma = 1.4$ is the ratio of specific heats and $R = 287.17$ J kg$^{-1}$ is the specific gas constant.
+This vortex is integrated until $t_\mathrm{max}=1$. After this time, the vortex has traveled such it is identical to its initial position.
+
+\Num In this setup, $\Delta x = \Delta y = 1/32$ which corresponds to 33 nodes per side, $\Delta t =1/1000$, with $t\in [0,1]$ so that there are 1000 timesteps.
+
+\Ana The analytical solution are the initial conditions translated by $t \cdot (u_\mathrm{bg}, v_\mathrm{bg})$, where $t$ is the model time. This is just a Galiei transformation.
+
+\Check Compare final solution with initial conditions and figure \ref{fig:eulervortex}.
+
+\begin{figure}
+\begin{center}
+\includegraphics[width=0.42\linewidth]{figures/eulerPTvortex00000000.pdf}
+\includegraphics[width=0.42\linewidth]{figures/eulerPTvortex00001000.pdf}\\
+\includegraphics[width=0.42\linewidth]{figures/eulerTEvortex00000000.pdf}
+\includegraphics[width=0.42\linewidth]{figures/eulerTEvortex00001000.pdf}\\
+\end{center}
+\caption{Potential temperature (upper plots) and total energy (lower plots) profiles at $t=0$ and $t=1$ for the Euler vortex test case.}\label{fig:eulervortex}
+\end{figure}
+
+\subsection{Non-linear simple wave with Euler equations}
+
+\Aim Check the correctness of the discretization for the Euler equations w.r.t.\ propagation of sound waves with different limtiting strategies.
+
+\Def This simple non-linear wave is a one dimensional case taken from \cite{Benacchio2014}. Due to the non-linearity, after some time this wave produces a shock front. The calculation is performed on the unit square $\Omega = [0,1]^2$ with periodic boundary conditions. Here, the primary variables are either  density $\rho$, momentum $\rho\textbf{u}$ and total energy $\rho e$, or the total energy is replaced by potential temperature $\rho \Theta$.
+
+The initial conditions are
+\begin{align*}
+  u    &= \dfrac{2}{\gamma-1} \tilde{c} \sin\left(2\pi x \right)\\
+  \rho &= \rho_\mathrm{ref} \left[1+ \dfrac{\tilde{c}}{c_\mathrm{ref}}\sin\left(2\pi x \right) \right]^\frac{2}{\gamma-1}\\
+  P    &= P_\mathrm{ref}\left[1+ \dfrac{\tilde{c}}{c_\mathrm{ref}}\sin\left(2\pi x \right) \right]^\frac{2\gamma}{\gamma-1}
+\end{align*}
+with $\rho_\mathrm{ref}=1$ kg m$^{-3}$, $\gamma = 2$, $c_\mathrm{ref}=\sqrt{\gamma P_\mathrm{ref}/\rho_\mathrm{ref}}$ and $P_\mathrm{ref} = 101325$ Pa. The energy representation is calculated by either
+\begin{equation*}
+  \rho e = \dfrac{1}{2} \rho\textbf{u}\cdot\textbf{u} +  \dfrac{P}{(\gamma -1)}
+\end{equation*}
+or
+\begin{equation*}
+  \rho \Theta = \dfrac{P_0}{R} \left(\dfrac{P}{P_0}\right)^\frac{1}{\gamma}.
+\end{equation*} The parameter $\tilde{c}$ is either set to $0.05c_\mathrm{ref}$
+
+\Num In this setup, $\Delta x = \Delta y = 1/64$ which corresponds to 65 nodes per side, $\Delta t = 0.00000267282$, with 1000 timesteps.
+
+\Ana The analytical solution is only available until the shock occurs and can be calculated by the method of characteristics.
+
+\Check Compare results with either \cite{Vater2013}, \cite{Benacchio2014} and figures \ref{fig:eulersimplewave} and \ref{fig:eulersimplewaveshu}.
+
+\begin{figure}
+\includegraphics[width=0.33\linewidth]{figures/eulersimplewave00000000.pdf}
+\includegraphics[width=0.33\linewidth]{figures/eulersimplewave00000400.pdf}
+\includegraphics[width=0.33\linewidth]{figures/eulersimplewave00001000.pdf}
+\caption{Simplewave solution at $t=0$, $t=0.001069128$ and $t=0.00267282$ with the potential temperature form in blue and the total energy form in red. Here, no limiter has been used.}\label{fig:eulersimplewave}
+\end{figure}
+
+\begin{figure}
+\includegraphics[width=0.33\linewidth]{figures/eulersimplewaveshu00000000.pdf}
+\includegraphics[width=0.33\linewidth]{figures/eulersimplewaveshu00000400.pdf}
+\includegraphics[width=0.33\linewidth]{figures/eulersimplewaveshu00001000.pdf}
+\caption{Simplewave solution at $t=0$, $t=0.001069128$ and $t=0.00267282$ with the potential temperature form in blue and the total energy form in red. Cockburn and Shu limiting has been used in this case.}\label{fig:eulersimplewaveshu}
+\end{figure}
+
+
+\subsection{Constant linear advection of a smooth field}
+
+\Aim Check correctness of the discretization of the linear advection equation with constant velocity.
+
+\Def This test case is performed on the unit square $\Omega = [0,1]^2$ with periodic boundary conditions. An initial profile of sines is advected diagonally across the domain with $(u_\mathrm{bg}, v_\mathrm{bg}) =(1,1)$. Here, just one variable has to be initialized:
+\begin{equation*}
+\phi = 2+\sin(2\pi x)\sin(2\pi y).
+\end{equation*}
+The solution is integrated until $t_\mathrm{max}=5$. This corresponds to five periods, the initial combination of sines travels through the domain. In the end, the sines arrive at the same position they started from.
+
+\Ana The analytical solution are the initial conditions translated by $t \cdot (u_\mathrm{bg}, v_\mathrm{bg})$, where $t$ is the model time. This is just a Galiei transformation.
+
+\Check Compare final solution with initial conditions (see figure \ref{fig:linadvect}).
+
+\begin{figure}
+\begin{center}
+\includegraphics[width=0.42\linewidth]{figures/linadvsines00000000.pdf}
+\includegraphics[width=0.42\linewidth]{figures/linadvsines00001000.pdf}
+\end{center}
+\caption{Initial and final ($t=5$) tracer concentration for the linear advection test case.}\label{fig:linadvect}
+\end{figure}
+
+% \subsection*{Some examples for the \texttt{fixme} package}
+%
+% This is a simple example text.\jbnote{a simple note} This is a simple example text. This is a simple example text. This is a simple example text. This is a simple example text.\nbnote{another simple note} This is a simple example text. This is a simple example text. This is a simple example text. This is a simple example text. This is a simple example text. This is a simple example text. This is a simple example text. This is a simple example text.\sbnote[nomargin, inline]{an inline note} This is a simple example text. This is a simple example text. This is a simple example text. This is a simple example text. This is a simple example text. This is a simple example text.
+%
+% \begin{svlongnote}[nomargin]{a longer note}
+%  This is a longer note, which can go over several lines. This is a longer note, which can go over several lines. This is a longer note, which can go over several lines. This is a longer note, which can go over several lines.
+% \end{svlongnote}
+%
+% This is a simple example text. This is a simple example text. This is a simple example text. This is a simple example text. \sbnote*{test with highlighting}{This is a simple example text.} This is a simple example text. This is a simple example text. This is a simple example text. This is a simple example text. This is a simple example text. This is a simple example text. This is a simple example text. \nbnote*[nomargin, inline]{test with highlighting, inline}{This is a simple example text.} This is a simple example text. This is a simple example text. This is a simple example text. This is a simple example text. This is a simple example text. This is a simple example text.
+
+\bibliographystyle{plain}
+\bibliography{testsuite-refs}
+
+\listoffixmes
+
+\end{document}

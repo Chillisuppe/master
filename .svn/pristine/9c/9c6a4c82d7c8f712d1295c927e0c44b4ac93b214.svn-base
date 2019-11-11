@@ -1,0 +1,101 @@
+#-------------------------------------------------------------------------------
+# This file contains the definition of an initial triangulation
+# of a square: x,y \in [0, 2*10^6] with reflecting
+# boundary conditons on all boundaries.
+#
+# This file is used for the cyclone test case.
+#
+# j. behrens, 04/2006
+#-------------------------------------------------------------------
+# first give the global defining parameters
+!--- dimension of the grid coordinates
+GRID_DIMENSION
+2
+!--- number of vertices in each element (3: triangular, 4: quadrilateral)
+ELEMENT_VERTICES
+3
+!--- total number of nodes
+NUMBER_OF_NODES
+25
+!--- total number of edges
+NUMBER_OF_EDGES
+56
+!--- total number of elements
+NUMBER_OF_ELEMENTS
+32
+# now define the boundary condition flags
+DEF_INNERITEM
+0
+DEF_DIRICHLETBOUNDARY
+-1
+DEF_NEUMANNBOUNDARY
+-2
+DEF_REFLECTING
+-3
+DEF_TRANSPARENT
+-4
+# now define the nodes (short format)
+NODES_DESCRIPTION
+  1         0.0        0.0
+  2         0.0   500000.0
+  3         0.0  1000000.0
+  4         0.0  1500000.0
+  5         0.0  2000000.0
+  6    500000.0        0.0
+  7    500000.0   500000.0
+  8    500000.0  1000000.0
+  9    500000.0  1500000.0
+ 10    500000.0  2000000.0
+ 11   1000000.0        0.0
+ 12   1000000.0   500000.0
+ 13   1000000.0  1000000.0
+ 14   1000000.0  1500000.0
+ 15   1000000.0  2000000.0
+ 16   1500000.0        0.0
+ 17   1500000.0   500000.0
+ 18   1500000.0  1000000.0
+ 19   1500000.0  1500000.0
+ 20   1500000.0  2000000.0
+ 21   2000000.0        0.0
+ 22   2000000.0   500000.0
+ 23   2000000.0  1000000.0
+ 24   2000000.0  1500000.0
+ 25   2000000.0  2000000.0
+   
+ELEMENTS_DESCRIPTION
+  1   7  1  6    3   -3  0  0
+  2   1  7  2    3    0 -3  0
+  3   7  3  2    3   -3  0  0
+  4   3  7  8    3    0  0  0
+  5   9  3  8    3    0  0  0
+  6   3  9  4    3    0 -3  0
+  7   9  5  4    3   -3  0  0
+  8   5  9 10    3    0 -3  0 
+  9   9 15 10    3   -3  0  0
+ 10  15  9 14    3    0  0  0
+ 11   9 13 14    3    0  0  0
+ 12  13  9  8    3    0  0  0
+ 13   7 13  8    3    0  0  0
+ 14  13  7 12    3    0  0  0
+ 15   7 11 12    3    0  0  0
+ 16  11  7  6    3    0 -3  0
+ 17  17 11 16    3   -3  0  0
+ 18  11 17 12    3    0  0  0
+ 19  17 13 12    3    0  0  0
+ 20  13 17 18    3    0  0  0
+ 21  19 13 18    3    0  0  0
+ 22  13 19 14    3    0  0  0
+ 23  19 15 14    3    0  0  0
+ 24  15 19 20    3    0 -3  0
+ 25  19 25 20    3   -3  0  0
+ 26  25 19 24    3    0 -3  0
+ 27  19 23 24    3   -3  0  0
+ 28  23 19 18    3    0  0  0
+ 29  17 23 18    3    0  0  0
+ 30  23 17 22    3    0 -3  0
+ 31  17 21 22    3   -3  0  0
+ 32  21 17 16    3    0 -3  0
+
+#-------------------------------------------------------------------
+# end of file
+#-------------------------------------------------------------------

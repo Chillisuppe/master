@@ -1,0 +1,87 @@
+#-----------------------------------------------------------
+# Input file for batch mode input
+# input is controlled via keywords
+#
+# j. behrens 12/96
+#-----------------------------------------------------------
+# the experiment no. (0 for a new experiment)     [integer]
+EXPERIMENT_NUMBER
+0
+# desired maximum level of refinements            [integer]
+FINE_GRID_LEVEL
+8
+# minimum level of refinements                    [integer]
+COARSE_GRID_LEVEL
+8
+# tolerance for refinement                        [real]
+TOLERANCE_OF_REFINEMENT
+0.02
+# tolerance for coarsening                        [real]
+TOLERANCE_OF_COARSENING
+0.01
+# watermark for refinement                        [real]
+WATERMARK_OF_REFINEMENT
+0.01
+# watermark for coarsening                        [real]
+WATERMARK_OF_COARSENING
+0.001
+# timestep length                                 [real]
+TIMESTEP_LENGTH
+0.005
+# timestepping scheme (euler, rk22, rk33, rk34, rk35)  [character]
+TIMESTEPPING
+rk22
+# first timestep                                  [integer]
+BEGINNING_TIMESTEP
+1
+# last timestep                                   [integer]
+FINISHING_TIMESTEP
+1000
+# plot in NetCDF style to file (no plot = 0)      [integer]
+NETCDF_FILE_PLOTTING
+1
+# equidist. subtriang pts per edge (default: 2)   [integer]
+SUBTRIANG_PTS
+2
+# plot in vtu style for paraview (no plot = 0)    [integer]
+VTU_FILE_PLOTTING
+0
+# timesteps between plots                         [integer]
+STEPS_BTW_PLOTS
+10
+# timesteps between saves                         [integer]
+STEPS_BTW_SAVES
+5000
+# diagnostics (on = 1, off = 0)                   [integer]
+DIAGNOSTICS
+0
+# steps between diagnostics                       [integer]
+STEPS_BTW_DIAG
+100
+# save last timestep for next experiment (no = 0) [integer]
+SAVE_FINISH_CONFIGURATION
+0
+# file defining the domain                        [character]
+DOMAIN_FILE_NAME
+Domain.dat
+# file defining the initial triangulation         [character]
+TRIANG_FILE_NAME
+Triang_1by1_period_fine.dat
+# number of signature files provided              [integer]
+NUM_SIGNATURE_FILES
+1
+# signature file name                             [character]
+SIGNATURE_FILE_NAME
+dg_linear.ftf
+# plot analytic solution to file (no plot = 0)    [integer]
+ANALYTIC_SOL_PLOTTING
+1
+#-----------------------------------------------------------
+# equation specific parameters
+#-----------------------------------------------------------
+# advection velocity
+VELOCITY
+0.1  0.1
+#-----------------------------------------------------------
+# END OF FILE
+#-----------------------------------------------------------

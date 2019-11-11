@@ -1,0 +1,42 @@
+#-------------------------------------------------------------------
+# This file contains the definition of an initial triangulation
+# of a square which is 1 times 1 units wide and has four
+# reflecting boundaries.
+#
+# j. behrens, 04/2006
+#-------------------------------------------------------------------
+# first give the global defining parameters
+!--- dimension of the grid coordinates
+GRID_DIMENSION
+2
+!--- number of vertices in each element (3: triangular, 4: quadrilateral)
+ELEMENT_VERTICES
+3
+!--- total number of nodes
+NUMBER_OF_NODES
+4
+!--- total number of edges
+NUMBER_OF_EDGES
+5
+!--- total number of elements
+NUMBER_OF_ELEMENTS
+2
+# now define the boundary condition flags
+DEF_INNERITEM
+0
+DEF_DIRICHLETBOUNDARY
+-1
+DEF_NEUMANNBOUNDARY
+-2
+# now define the nodes (short format)
+NODES_DESCRIPTION
+  1   0.00   0.00
+  2  25.92  27.60
+  3   0.00  27.60
+  4  25.92   0.00
+ELEMENTS_DESCRIPTION
+  1   1  2  3    3   -3 -4  0
+  2   2  1  4    3   -3 -4  0
+#-------------------------------------------------------------------
+# end of file
+#-------------------------------------------------------------------

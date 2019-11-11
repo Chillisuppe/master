@@ -1,0 +1,62 @@
+#-------------------------------------------------------------------
+# This file contains the definition of an initial triangulation
+# of a channel: x \in [0, 10] and y \in [0, 2] with reflecting
+# boundary conditons on the outer boundaries.
+#
+# v. hofmaier, 10/2019
+#-------------------------------------------------------------------
+# first give the global defining parameters
+!--- dimension of the grid coordinates
+GRID_DIMENSION
+2
+!--- number of vertices in each element (3: triangular, 4: quadrilateral)
+ELEMENT_VERTICES
+3
+!--- total number of nodes
+NUMBER_OF_NODES
+12
+!--- total number of edges
+NUMBER_OF_EDGES
+21
+!--- total number of elements
+NUMBER_OF_ELEMENTS
+10
+# now define the boundary condition flags
+DEF_INNERITEM
+0
+DEF_DIRICHLETBOUNDARY
+-1
+DEF_NEUMANNBOUNDARY
+-2
+DEF_REFLECTING
+-3
+DEF_TRANSPARENT
+-4
+# now define the nodes (short format)
+NODES_DESCRIPTION
+  1   0.0  0.0
+  2   2.0  2.0
+  3   0.0  2.0
+  4   2.0  0.0
+  5   4.0  0.0
+  6   4.0  2.0
+  7   6.0  2.0
+  8   6.0  0.0
+  9   8.0  0.0
+ 10   8.0  2.0
+ 11  10.0  2.0
+ 12  10.0  0.0
+ELEMENTS_DESCRIPTION
+  1   1  2  3    3   -3 -3  0
+  2   2  1  4    3   -3  0  0
+  3   5  2  4    3    0 -3  0
+  4   2  5  6    3    0 -3  0
+  5   5  7  6    3   -3  0  0
+  6   7  5  8    3   -3  0  0
+  7   9  7  8    3    0 -3  0
+  8   7  9 10    3    0 -3  0
+  9   9 11 10    3   -3  0  0
+ 10  11  9 12    3   -3 -3  0
+#-------------------------------------------------------------------
+# end of file
+#-------------------------------------------------------------------

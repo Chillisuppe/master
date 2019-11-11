@@ -1,0 +1,2 @@
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:~/Development/amatos2d/lib/linux_g64
+./DGM -f Parameters.dat

@@ -1,0 +1,121 @@
+##################################################################
+#   STORMFLASH                                                   #
+#   Adaptive STORM surge model based on the                      #
+#   FLexible Adaptive Semi-Lagrangian Hack                       #
+#   written in Fortran 90                                        #
+##################################################################
+
+# MACHINE
+MACHINE = macosx_gfortran
+
+# SET MAKETHING CORRESPONDING TO MACHINE
+MAKETHING = DGM
+
+# OPTIMIZATION SETTINGS [debug|norm|opt]
+MODE := opt
+
+# FURTHER OPTIONS
+DBL_DBL    := yes
+
+# LIBRARY SETTINGS [yes|no]
+# Usage: $(MAKE) USE_NETCDF=yes
+USE_NETCDF := yes
+
+# SET MAIN DIRECTORY PATH
+# !! This has to be alterd by user !!
+ROOTDIR = $(HOME)/Documents/Development/amatos
+
+# SET atlas/blas DIRECTORY PATH
+# !! This has to be alterd by user !!
+BLASLIB =
+
+# SET LAPACK DIRECTORY PATH
+# !! This has to be alterd by user !!
+LAPACKLIB = -framework Accelerate
+
+# SET NETCDF PATHS
+NETCDFLIB =
+NETCDFINC =
+NCUGRIDLIB =
+ifeq ($(strip $(USE_NETCDF)), yes)
+  NETCDFLIB = -L/sw2/lib -lnetcdff -lnetcdf
+  NETCDFINC = -I/sw2/include
+  NCUGRIDLIB = -lncugrid
+endif
+
+# SET MORE DIRECTORY PATHS
+LIBDIR  = $(ROOTDIR)/../lib/$(MACHINE)
+INCDIR  = $(ROOTDIR)/../include/$(MACHINE)
+MODDIR  = $(ROOTDIR)/../include/$(MACHINE)
+AMATDIR = $(ROOTDIR)/amatos2d/trunk/compile/$(MACHINE)
+MAINDIR = $(ROOTDIR)/StormFlash2d/branches/storm_merge
+
+SRCDIR  = $(MAINDIR)/src/flash
+SYSDIR  = $(MAINDIR)/src/system/gfortran
+TIMDIR  = $(MAINDIR)/src/timing
+DATDIR  = $(MAINDIR)/data
+BUILDIR = $(MAINDIR)/compile/$(MACHINE)
+
+# SET PATH TO GRID_API.mod
+AMATOS = $(MODDIR)/grid_api.mod
+
+# SET THE ENDING OF MODULE FILES
+MODEND = mod
+
+#----------------------------------------------------------------#
+# FLAGS FOR LINUX / Intel Fortran Compiler                       #
+#----------------------------------------------------------------#
+F90     = gfortran
+cc      = gcc
+CC      = g++
+LOADER  = gfortran
+
+# -------------- next for debugging -----------------------------#
+ifeq ($(strip $(MODE)),debug)
+#   FFLAGS  = -fbounds-check -ggdb -pg
+  FFLAGS  = -ggdb -pg -Wall -pedantic -fimplicit-none -fbounds-check -fbacktrace -ffpe-trap=invalid,zero,overflow,underflow
+  CFLAGS  = -ggdb -pg
+  LDFLAGS = -ggdb -pg
+endif
+#--------------- paths for debugger -----------------------------#
+VPATH = $(AMATDIR),$(BUILDIR)
+
+# -------------- next for normal compilation --------------------#
+ifeq ($(strip $(MODE)),norm)
+  FFLAGS  =
+  CFLAGS  =
+  LDFLAGS =
+endif
+# -------------- next with aggresive optimization (Pentium M) ---#
+ifeq ($(strip $(MODE)),opt)
+  FFLAGS  = -O3 -fPIC -funderscoring
+  CFLAGS  = -O3 -fpic
+  LDFLAGS = -O3
+endif
+
+#--------------- next for double precision etc. -----------------#
+ifeq ($(strip $(DBL_DBL)), yes)
+  FFLAGS += -DDBL_DBL
+endif
+
+# --------------------- include NetCDF or not -------------------#
+ifeq ($(strip $(USE_NETCDF)),yes)
+  FFLAGS += -DUSE_NETCDF
+endif
+
+# -------- next flag for using dummy graphics library -----------#
+LIBS = -L$(LIBDIR) -lamatos $(NCUGRIDLIB) $(NETCDFLIB) $(LAPACKLIB) \
+       $(BLASLIB) $(CCLIB)
+INCS = $(LAPACKINC) $(NETCDFINC) -I$(INCDIR) -I$(MODDIR) -I.
+
+#----------------------------------------------------------------#
+# common stuff                                                   #
+#----------------------------------------------------------------#
+
+include $(MAINDIR)/compile/Makefiles/Makefile.common
+-include $(MAINDIR)/compile/Makefiles/dependency.mk
+-include $(MAINDIR)/compile/Makefiles/Makefile.Toro
+-include $(MAINDIR)/compile/Makefiles/Makefile.Testsuite
+-include $(MAINDIR)/compile/Makefiles/Makefile.unittests
+-include $(MAINDIR)/compile/Makefiles/Makefile.Storms
+-include $(MAINDIR)/compile/Makefiles/Makefile.Thesis.Nicole

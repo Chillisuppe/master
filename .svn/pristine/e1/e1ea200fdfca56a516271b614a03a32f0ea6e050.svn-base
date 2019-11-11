@@ -1,0 +1,139 @@
+/**
+
+@page secInstall Installation
+
+StormFlash2d is written in Fortran (90/95) and mostly based on the grid library amatos in its 2d version. Furthermore, it uses a few external libraries to perform mathematical operations and for reading and writing input/output in binary formats etc. For StormFlash2d to run you will need the following libraries installed on your computer:
+
+ - amatos2d
+ - BLAS (needed by amatos2d)
+ - LAPACK
+ - NetCDF (optional, for input/output using NetCDF format)
+
+Once you have all these libraries installed, set the links in the Makefile accordingly. Sample Makefiles are provided with the code and can be found in the ``~/compile/[architecture]`` directory where [architecture] stands for the architecture you are using. It is a combination of the operating system and the compiler to be used) Examples are linux_g64, macosx_intel, etc. Copy a suitable Makefile sample to "Makefile" or "Makefile.YourName" and create a symbolic link by the command line command
+
+    ln -s Makefile.YourName Makefile
+
+In the Makefile it usually suffices to adjust a few things. These are the variables
+- `ROOTDIR` : path where amatos2d is located
+- `MAINDIR` : path where Stormflash2d is located
+- `BLASLIB`, `LAPACKLIB`, `NETCDFLIB` : location of BLAS, LAPACK and NetCDF libraries
+- `LAPACKINC`, `NETCDFINC` : location of corresponding include (header) files
+
+Additionally, some options can be set:
+- `MODE` : compile code for debugging (`debug`), normal execution (`norm`), or optimized (`opt`)
+- `DBL_DBL` : use double precision (IS THIS CORRECT? INTERPLAY WITH AMATOS?)
+- `USE_NETCDF` : use (`yes`) or not use (`no`) NetCDF library
+
+To compile the code, go to ``~/compile/[architecture]``. Here you create the execuatable `DGM` by typing `` make \<testcase\> ``. There is no default compilation at the moment. An example testcase would be `` make vortex ``, which simulates a quasi-stationary vortex with adaptive mesh refinement. After compilation, you can run the model by typing ``./DGM `` on the command line. This should give you a short help on available command line options.
+
+
+@page secParameters A Black Box Perspective
+
+StormFlash2d requires several input files that specify the numerical domain, polynomials that are used to approximate the prognostic variables and so forth. All of them need to be specified in a _Parameters_ file (usually called _Parameters.dat_). Additionally several simulation parameters are given in this file. They consist of three groups: general numerical and IO parameters, equation specific parameters, and testcase specific parameters. A parameter is always set by giving the keyword in one line and its value in the following line. Before these pairs of lines there might be comment lines, which begin with a \# .
+
+## General numerical and IO parameters:
+
+Keyword                   |Description                                    | type          | default/required
+--------------------------|-----------------------------------------------|---------------|-----------------
+EXPERIMENT_NUMBER         | the experiment no. (0 for a new experiment)   | integer (>=0) | required
+FINE_GRID_LEVEL           | desired maximum level of refinements          | integer (>=0) | required
+COARSE_GRID_LEVEL         | minimum level of refinements                  | integer (>=0) | required
+TOLERANCE_OF_REFINEMENT   | tolerance for refinement                      | real (>=0)    | required
+TOLERANCE_OF_COARSENING   | tolerance for coarsening                      | real (>=0)    | required
+WATERMARK_OF_REFINEMENT   | watermark for refinement                      | real (>=0)    | required
+WATERMARK_OF_COARSENING   | watermark for coarsening                      | real (>=0)    | required
+TIMESTEP_LENGTH           | timestep length                               | real          | required(*)
+MAX_CFL_NUMBER            | maximum CFL number for time stepping          | real          | required(*)
+TIMESTEPPING              | timestepping scheme | character (euler, rk22, rk33, rk34, rk35) | euler
+BEGINNING_TIMESTEP        | first timestep                                | integer       | 1
+FINISHING_TIMESTEP        | last timestep                                 | integer       | required(*)
+TIMESTEPPING_START_TIME   | initial experiment modeltime                  | real          | 0.0
+TIMESTEPPING_END_TIME     | final experiment modeltime                    | real          | required(*)
+ADAPT_REGION              | size of cell neighborhood to be additionally refined | integer | 0
+NETCDF_FILE_PLOTTING      | plot in NetCDF style to file (no plot = 0)    | integer       | 0
+SUBTRIANG_PTS             | equidist. subtriang pts per edge              | integer       | 2
+VTU_FILE_PLOTTING         | plot in vtu style for paraview (no plot = 0)  | integer       | 0
+ANASOL_PLOTTING           | plot analytic solution to file (no plot = 0)  | integer       | 0
+STEPS_BTW_PLOTS           | timesteps between plots                       | integer       | required(*), if NETCDF_FILE_PLOTTING or VTU_FILE_PLOTTING is set
+TIME_BTW_PLOTS            | time interval between plots                   | real          | required(*), if NETCDF_FILE_PLOTTING or VTU_FILE_PLOTTING is set
+STEPS_BTW_SAVES           | timesteps between saves                       | integer       | required
+DIAGNOSTICS               | diagnostics (on = 1, off = 0)                 | integer       | 0
+STEPS_BTW_DIAG            | steps between diagnostics                     | integer       | required, if DIAGNOSTICS = 1
+SAVE_FINISH_CONFIGURATION | save last timestep for next experiment (no = 0) | integer     | -1 (THAT MEANS IT IS SAVED!)
+DOMAIN_FILE_NAME          | file defining the domain                      | character     | Domain.dat
+TRIANG_FILE_NAME          | file defining the initial triangulation       | character     | Triang.dat
+NUM_SIGNATURE_FILES       | number of signature files provided            | integer       | 0 (SHOULD BE 1!?)
+SIGNATURE_FILE_NAME       | signature file name(s)                        | character     | -
+
+_Note:_ required(*) means that either FINISHING_TIMESTEP (for constant time stepping)
+or TIMESTEPPING_END_TIME (for CFL based timestepping) has to be set exclusively. If
+FINISHING_TIMESTEP is set, also TIMESTEP_LENGTH and STEPS_BTW_PLOTS has to be set;
+if TIMESTEPPING_END_TIME is set, also MAX_CFL_NUMBER and TIME_BTW_PLOTS has to be set.
+
+## Equation specific parameters:
+
+### Shallow water equations:
+
+Keyword                   |Description                                    | type | default
+--------------------------|-----------------------------------------------|------|--------
+VISCOSITY                 | viscosity                                     | real | 0.0
+BOTTOM_FRIC               | bottom friction                               | real | 0.0
+WIND_FRIC                 | wind friction                                 | real | 0.0
+FLUID_DENSITY             | density of fluid                              | real | 1000.0
+BATHY_PARAM_DEPTH         | center point fluid depth when surface is flat | real | 0.0
+WETDRY_TOL                | cut off tolerance for wetting and drying      | real | 1e-8
+
+
+### Euler equations:
+
+Keyword                   |Description                                    | type | default
+--------------------------|-----------------------------------------------|------|--------
+GAMMA                     | specific heat ratio                           | real | 1.4
+REF_PRESSURE              | reference pressure of gas                     | real | 101325.0
+GAS_CONSTANT              | specific gas constant                         | real | 287.0
+GRAVITY_SWITCH            | switch for gravity                            | real | 1.0
+
+
+### Linear Advection:
+
+Keyword                   |Description                                    | type | default
+--------------------------|-----------------------------------------------|------|--------
+VELOCITY                  | advection velocity                            | real | 0.1  0.1
+
+## Testcase specific parameters:
+
+Testcase specific parameters are specified in the routine `initial_setparam` in the `DG_initial` module, and can be different for each testcase. If defined in `initial_setparam`, they must be set in the Parameters file. An example can be found in DG_initial_riemannproblem.f90, where three test specific parameters of type real are set: XORIGIN, STATE_LEFT, STATE_RIGHT. The associated values must then also be set in the Parameters file.
+
+## Additional data needed:
+
+The needed initial data consists of
+
+- Domain.dat
+- Triang.dat : an ASCII file that specifies the initial triangulation
+- dg_***.ftf, e.g. dg_linear.ftf, a signature file in ftf format to specify the polynomials that are used for the numerical approximation
+
+Note that these files do not include the intial data for the prognostic variables. Those are to be specified via the module DG_initial in a file usually called DG_initial_&lt;MyTestCase&gt;.f90. Example files can be found in the source directory `~/src/flash/`.
+
+The output of the model are data files in netcdf or vtu format that contain snapshots of the prognostic variables. They are saved as StormFlash2d********.{nc,vtu} where the *s refer to the time step.
+If diagnostic mode is switched on for the simulation in _Parameters.dat_ an additional output (at the end of the simulation) is an ascii file StormFlash2d_diag.0000.
+
+![basic input/output for StormFlash2d](./SF2D_Doxy_Schematic.png)
+
+
+@page secWorkflow Workflow
+
+In this section, you will learn how to create your own test case. This assumes that you have installed the model as described in the section on Installation, i.e. you should have an executable **DGM**.
+
+1. **Create Your Test Case**:
+   Your test case requires twofold an input file _Parameters.dat_ including all specified input data files in `~/data` as well as a description of the initial state of the prognostic variables in `~/src/flash/`.
+   1.  Create your initial condition by writing a file `~/src/flash/DG_initial_MyTestCase.f90`. Sample initial conditions can be found in the same folder.
+   2.  Create your own `~/data/Parameters_MyTestCase.dat`by editing one of the existing parameters files. Adjustments will also need to be made to any input file that is given.
+
+2. **Copy the Files to `~/compile/linux_g64`** :
+   Now go to `~/compile/Makefiles/`and create your own Makefile
+3. **Run the Code**:
+   To run the code, execute the binary and specify the input file by typing `` ./DGM -f Parameters.dat `` in your terminal.
+
+@page secPostproc Postprocessing and Visualization
+
+**/

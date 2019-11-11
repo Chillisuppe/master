@@ -1,0 +1,56 @@
+@article{Cockburn1998,
+        Author = {Bernardo Cockburn and Chi-Wang Shu},
+        Doi = {10.1006/jcph.1998.5892},
+        Journal = {Journal of Computational Physics},
+        Number = {2},
+        Pages = {199--224},
+        Title = {The {R}unge-{K}utta Discontinuous {G}alerkin Method for Conservation Laws {V}: Multidimensional Systems},
+        Volume = {141},
+        Year = {1998},
+        Bdsk-Url-1 = {http://dx.doi.org/10.1006/jcph.1998.5892}}
+
+@article{Kuzmin2010,
+        Author = {Kuzmin, D.},
+        Journal = {J. Comput. Appl. Math.},
+        Pages = {3077--3085},
+        Title = {A vertex-based hierarchical slope limiter for p-adaptive discontinuous Galerkin methods},
+        Volume = {233},
+        Year = {2010}}
+
+@Article{Lynett2002,
+  Title                    = {Modeling wave runup with depth-integrated equations},
+  Author                   = {Patrick J. Lynett and Tso-Ren Wu and Philip L.-F. Liu},
+  Journal                  = {Coastal Engineering},
+  Year                     = {2002},
+  Number                   = {2},
+  Pages                    = {89--107},
+  Volume                   = {46},
+  Doi                      = {10.1016/S0378-3839(02)00043-1},
+}
+
+@article{Thacker1981,
+        Author = {William Carlisle Thacker},
+        Doi = {10.1017/S0022112081001882},
+        Journal = {Journal of Fluid Mechanics},
+        Pages = {499--508},
+        Title = {Some exact solutions to the nonlinear shallow-water wave equations},
+        Volume = {107},
+        Year = {1981}
+}
+
+@PHDTHESIS{Vater2013,
+  author = {Stefan Vater},
+  title  = {A Multigrid-based Multiscale Numerical Scheme for Shallow Water Flows
+            at Low Froude Number},
+  school = {Freie Universit{\"a}t Berlin},
+  year   = {2013},
+  url    = {http://www.diss.fu-berlin.de/diss/receive/FUDISS_thesis_000000093897}
+}
+
+@PHDTHESIS{Benacchio2014,
+    author = {Tommaso Benacchio},
+    title = {A blended semi-implicit numerical model for weakly compressible atmospheric dynamics},
+    school = {Freie Universit{\"a}t Berlin},
+    year = {2014},
+    url = {http://www.diss.fu-berlin.de/diss/receive/FUDISS_thesis_000000097149},
+}

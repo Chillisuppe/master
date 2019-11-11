@@ -1,0 +1,376 @@
+TSDIR := testsuite$(shell date +%Y%m%d-%H%M%S)
+
+testsuite: tsinit tsbeach tsshockdry tsshockquad tsshocknone \
+	   tsshockshu tsshockgiraldo tsshockKuSV tsshockBJSV \
+	   tswellbalanced tswind tshump tsvortexweak tsvortexstrong tsvortexrestart \
+           tsfreebasinBJSV tsfreebasinKuSV \
+           tseulerPTvortex tseulerTEvortex tseulerPTsimplewave tseulerPTsimplewaveshu \
+           tseulerTEsimplewave tseulerTEsimplewaveshu tslinadvsines
+
+tsinit:
+	@mkdir $(TSDIR)
+
+tsbeach:
+	@make maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp DG_limiter_KuSV.F90 DG_limiter.F90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_weak_SWE.F90 DG_flux.F90
+	@cp DG_initial_beach.f90 DG_initial.f90
+	@make executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_beach.dat .
+	@cp $(DATDIR)/Parameters_beach.dat Parameters.dat
+	@./DGM -f Parameters.dat
+	@mkdir $(TSDIR)/beach
+	@mv StormFlash2d* $(TSDIR)/beach/
+	@make tidy
+
+tsfreebasinBJSV:
+	@make maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp DG_limiter_BJSV.F90 DG_limiter.F90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_strong_SWE.F90 DG_flux.F90
+	@cp DG_initial_freebasin.f90 DG_initial.f90
+	@make executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_freebasin.dat .
+	@cp $(DATDIR)/Parameters_freebasin.dat Parameters.dat
+	@./DGM -f Parameters.dat
+	@mkdir $(TSDIR)/freebasinBJSV
+	@mv StormFlash2d* $(TSDIR)/freebasinBJSV/
+	@make tidy
+
+tsfreebasinKuSV:
+	@make maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp DG_limiter_KuSV.F90 DG_limiter.F90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_strong_SWE.F90 DG_flux.F90
+	@cp DG_initial_freebasin.f90 DG_initial.f90
+	@make executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_freebasin.dat .
+	@cp $(DATDIR)/Parameters_freebasin.dat Parameters.dat
+	@./DGM -f Parameters.dat
+	@mkdir $(TSDIR)/freebasinKuSV
+	@mv StormFlash2d* $(TSDIR)/freebasinKuSV/
+	@make tidy
+
+tsshock:
+# Note: this is only for internal use by tsshock*
+	@make maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_initial_riemannproblem.f90 DG_initial.f90
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/dg_quad.ftf .
+	@cp $(DATDIR)/gausspoints/gausspoints02.dat .
+	@cp $(DATDIR)/gausspoints/gausspoints04.dat .
+	@cp $(DATDIR)/Triang_channel.dat .
+
+tsshockdry:
+	@make tsshock
+	@cp DG_limiter_KuSV.F90 DG_limiter.F90
+	@make executable
+	@cp $(DATDIR)/Parameters_shockdry.dat Parameters.dat
+	@./DGM -f Parameters.dat
+	@mkdir $(TSDIR)/shockdry
+	@mv StormFlash2d* $(TSDIR)/shockdry/
+	@make tidy
+
+tsshockquad:
+	@make tsshock
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@make executable
+	@cp $(DATDIR)/Parameters_shockquad.dat Parameters.dat
+	@./DGM -f Parameters.dat
+	@mkdir $(TSDIR)/shockquad
+	@mv StormFlash2d* $(TSDIR)/shockquad/
+	@make tidy
+
+tsshocknone:
+	@make tsshock
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@make executable
+	@cp $(DATDIR)/Parameters_shocklinear.dat Parameters.dat
+	@./DGM -f Parameters.dat
+	@mkdir $(TSDIR)/shocknone
+	@mv StormFlash2d* $(TSDIR)/shocknone/
+	@make tidy
+
+tsshockshu:
+	@make tsshock
+	@cp DG_limiter_shu.F90 DG_limiter.F90
+	@make executable
+	@cp $(DATDIR)/Parameters_shocklinear.dat Parameters.dat
+	@./DGM -f Parameters.dat
+	@mkdir $(TSDIR)/shockshu
+	@mv StormFlash2d* $(TSDIR)/shockshu/
+	@make tidy
+
+tsshockgiraldo:
+	@make tsshock
+	@cp DG_limiter_giraldo.F90 DG_limiter.F90
+	@make executable
+	@cp $(DATDIR)/Parameters_shocklinear.dat Parameters.dat
+	@./DGM -f Parameters.dat
+	@mkdir $(TSDIR)/shockgiraldo
+	@mv StormFlash2d* $(TSDIR)/shockgiraldo/
+	@make tidy
+
+tsshockKuSV:
+	@make tsshock
+	@cp DG_limiter_KuSV.F90 DG_limiter.F90
+	@make executable
+	@cp $(DATDIR)/Parameters_shocklinear.dat Parameters.dat
+	@./DGM -f Parameters.dat
+	@mkdir $(TSDIR)/shockKuSV
+	@mv StormFlash2d* $(TSDIR)/shockKuSV/
+	@make tidy
+
+tsshockBJSV:
+	@make tsshock
+	@cp DG_limiter_BJSV.F90 DG_limiter.F90
+	@make executable
+	@cp $(DATDIR)/Parameters_shocklinear.dat Parameters.dat
+	@./DGM -f Parameters.dat
+	@mkdir $(TSDIR)/shockBJSV
+	@mv StormFlash2d* $(TSDIR)/shockBJSV/
+	@make tidy
+
+tswellbalanced:
+	@make maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp MISC_bathy_etopo.f90 MISC_bathy.f90
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_initial_WB.f90 DG_initial.f90
+	@$(MAKE) executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_square30.dat .
+	@cp $(DATDIR)/Parameters_WB_exp.dat Parameters.dat
+	@./DGM -f Parameters.dat
+	@mkdir $(TSDIR)/wellbalanced
+	@mv StormFlash2d* $(TSDIR)/wellbalanced/
+	@make tidy
+
+tswind:
+	@make maincopy
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@cp MISC_bathy_etopo.f90 MISC_bathy.f90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_error_vort.f90 DG_errorestimate.f90
+	@cp DG_initial_wind.f90 DG_initial.f90
+	@$(MAKE) executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_square30.dat .
+	@cp $(DATDIR)/Parameters_wind.dat Parameters.dat
+	@./DGM -f Parameters.dat
+	@mkdir $(TSDIR)/wind
+	@mv StormFlash2d* $(TSDIR)/wind/
+	@make tidy
+
+tshump:
+	@make maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@cp MISC_bathy_etopo.f90 MISC_bathy.f90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_initial_hump.f90 DG_initial.f90
+	@$(MAKE) executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_2by2_period_fine.dat .
+	@cp $(DATDIR)/Parameters_hump.dat ./Parameters.dat
+	@./DGM -f Parameters.dat
+	@mkdir $(TSDIR)/hump
+	@mv StormFlash2d* $(TSDIR)/hump/
+	@make tidy
+
+tsvortex:
+# Note: this is only for internal use by tsvortexweak, tsvortexstrong, tsvortexrestart
+	@make maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@cp MISC_bathy_etopo.f90 MISC_bathy.f90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_initial_vortex.f90 DG_initial.f90
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_4by2_period_fine.dat .
+	@cp $(DATDIR)/Parameters_vortex_timeconst.dat Parameters.dat
+
+tsvortexweak:
+	@make tsvortex
+	@cp DG_flux_weak.F90 DG_flux.F90
+	@$(MAKE) executable
+	@./DGM -f Parameters.dat
+	@mkdir $(TSDIR)/vortexweak
+	@mv StormFlash2d* $(TSDIR)/vortexweak/
+	@make tidy
+
+tsvortexstrong:
+	@make tsvortex
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@$(MAKE) executable
+	@./DGM -f Parameters.dat
+	@mkdir $(TSDIR)/vortexstrong/
+	@mv StormFlash2d* $(TSDIR)/vortexstrong/
+	@make tidy
+
+tsvortexrestart:
+	@make tsvortex
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@$(MAKE) executable
+	@cp $(DATDIR)/Parameters_vortex_restart.dat Parameters.dat
+	@./DGM -f Parameters.dat
+	@./DGM -f StormFlash2d_input.0001
+	@mkdir $(TSDIR)/vortexrestart/
+	@mv StormFlash2d* $(TSDIR)/vortexrestart/
+	@make tidy
+
+tseulervortex:
+# Note: this is only for internal use by tseulerPTvortex and tseulerTEvortex
+	@make maincopy
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp $(SRCDIR)/euler/DG_cfl.f90 DG_cfl.f90
+	@cp $(SRCDIR)/euler/DG_boundary.F90 DG_boundary.F90
+	@cp $(SRCDIR)/euler/DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp $(SRCDIR)/euler/DG_initial_vortex.f90 DG_initial.f90
+	@cp $(SRCDIR)/euler/IO_equation.f90 IO_equation.f90
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_1by1_period_fine.dat .
+	@cp $(DATDIR)/euler/Parameters_vortex.dat Parameters.dat
+
+tseulerPTvortex:
+	@make tseulervortex
+	@cp $(SRCDIR)/euler/DG_equation_PT.F90 DG_equation.F90
+	@$(MAKE) executable
+	@./DGM -f Parameters.dat
+	@mkdir $(TSDIR)/eulerPTvortex
+	@mv StormFlash2d* $(TSDIR)/eulerPTvortex
+	@make tidy
+
+tseulerTEvortex:
+	@make tseulervortex
+	@cp $(SRCDIR)/euler/DG_equation_TE_notWB.F90 DG_equation.F90
+	@$(MAKE) executable
+	@./DGM -f Parameters.dat
+	@mkdir $(TSDIR)/eulerTEvortex
+	@mv StormFlash2d* $(TSDIR)/eulerTEvortex
+	@make tidy
+
+tseulersimplewave:
+# Note: this is only for internal use by tseulerPTsimplewave, tseulerPTsimplewaveshu,
+#       tseulerTEsimplewave and tseulerTEsimplewaveshu
+	@make maincopy
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp $(SRCDIR)/euler/DG_cfl.f90 DG_cfl.f90
+	@cp $(SRCDIR)/euler/DG_boundary.F90 DG_boundary.F90
+	@cp $(SRCDIR)/euler/DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp $(SRCDIR)/euler/DG_initial_simplewave.f90 DG_initial.f90
+	@cp $(SRCDIR)/euler/IO_equation.f90 IO_equation.f90
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_1by1_period_fine.dat .
+	@cp $(DATDIR)/euler/Parameters_simplewave.dat Parameters.dat
+
+tseulerPTsimplewave:
+	@make tseulersimplewave
+	@cp $(SRCDIR)/euler/DG_equation_PT.F90 DG_equation.F90
+	@$(MAKE) executable
+	@./DGM -f Parameters.dat
+	@mkdir $(TSDIR)/eulerPTsimplewave
+	@mv StormFlash2d* $(TSDIR)/eulerPTsimplewave
+	@make tidy
+
+tseulerPTsimplewaveshu:
+	@make tseulersimplewave
+	@cp $(SRCDIR)/euler/DG_equation_PT.F90 DG_equation.F90
+	@cp $(SRCDIR)/euler/DG_limiter_shu.F90 DG_limiter.F90
+	@$(MAKE) executable
+	@./DGM -f Parameters.dat
+	@mkdir $(TSDIR)/eulerPTsimplewaveshu
+	@mv StormFlash2d* $(TSDIR)/eulerPTsimplewaveshu
+	@make tidy
+
+tseulerTEsimplewave:
+	@make tseulersimplewave
+	@cp $(SRCDIR)/euler/DG_equation_TE.F90 DG_equation.F90
+	@$(MAKE) executable
+	@./DGM -f Parameters.dat
+	@mkdir $(TSDIR)/eulerTEsimplewave
+	@mv StormFlash2d* $(TSDIR)/eulerTEsimplewave
+	@make tidy
+
+tseulerTEsimplewaveshu:
+	@make tseulersimplewave
+	@cp $(SRCDIR)/euler/DG_equation_TE.F90 DG_equation.F90
+	@cp $(SRCDIR)/euler/DG_limiter_shu.F90 DG_limiter.F90
+	@$(MAKE) executable
+	@./DGM -f Parameters.dat
+	@mkdir $(TSDIR)/eulerTEsimplewaveshu
+	@mv StormFlash2d* $(TSDIR)/eulerTEsimplewaveshu
+	@make tidy
+
+tslinadvsines:
+	@make maincopy
+	@cp DG_flux_weak.F90 DG_flux.F90
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp $(SRCDIR)/linAdvect/DG_cfl.f90 DG_cfl.f90
+	@cp $(SRCDIR)/linAdvect/DG_equation.F90 DG_equation.F90
+	@cp $(SRCDIR)/linAdvect/DG_boundary.F90 DG_boundary.F90
+	@cp $(SRCDIR)/linAdvect/DG_RS_upwind.F90 DG_riemann_solver.F90
+	@cp $(SRCDIR)/linAdvect/DG_initial_sines.f90 DG_initial.f90
+	@cp $(SRCDIR)/linAdvect/IO_equation.f90 IO_equation.f90
+	@$(MAKE) executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_1by1_period_fine.dat .
+	@cp $(DATDIR)/linAdvect/Parameters_sines*.dat .
+	@./DGM -f Parameters_sines_euler.dat
+	@mkdir $(TSDIR)/linadvsines_euler
+	@mv StormFlash2d* $(TSDIR)/linadvsines_euler
+	@./DGM -f Parameters_sines_rk22.dat
+	@mkdir $(TSDIR)/linadvsines_rk22
+	@mv StormFlash2d* $(TSDIR)/linadvsines_rk22
+	@./DGM -f Parameters_sines_rk33.dat
+	@mkdir $(TSDIR)/linadvsines_rk33
+	@mv StormFlash2d* $(TSDIR)/linadvsines_rk33
+	@./DGM -f Parameters_sines_rk34.dat
+	@mkdir $(TSDIR)/linadvsines_rk34
+	@mv StormFlash2d* $(TSDIR)/linadvsines_rk34
+	@./DGM -f Parameters_sines_rk35.dat
+	@mkdir $(TSDIR)/linadvsines_rk35
+	@mv StormFlash2d* $(TSDIR)/linadvsines_rk35
+	@make tidy

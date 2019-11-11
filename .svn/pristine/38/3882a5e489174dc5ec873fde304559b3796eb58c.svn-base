@@ -1,0 +1,144 @@
+# author: Stefan Vater, 02/2017
+#
+# Note: two non-standard python packages are needed implicitly for these functions:
+#       pyugrid and cell_tree2d
+
+import numpy as np
+import types
+
+import interpolation as interp
+import quadrature as quad
+import trianglemappings as trmap
+
+import pyugrid
+
+def xytobary(x, y, xv, yv):
+    """
+    Map from (x,y) coordinates barycentric coordinates with vertex
+    coordinates (xv, yv)
+    """
+
+    from math import sqrt
+
+    f = np.finfo(float)
+    L = np.zeros((3, x.size))
+
+    detT =  (yv[1]-yv[2])*(xv[0]-xv[2])+(xv[2]-xv[1])*(yv[0]-yv[2])
+    L[0] = ((yv[1]-yv[2])*(x    -xv[2])+(xv[2]-xv[1])*(y    -yv[2])) / detT
+    L[1] = ((yv[2]-yv[0])*(x    -xv[2])+(xv[0]-xv[2])*(y    -yv[2])) / detT
+    L[2]   = 1.0 - L[0] - L[1]
+
+    # set small values really to zero
+    L[abs(L) < f.resolution] = 0.0
+
+    return L.T
+
+def get_crosssection(x1, x2, ugrid, varkws, time=0):
+  x = np.linspace(x1[0], x2[0], 1201)
+  y = np.linspace(x1[1], x2[1], 1201)
+
+  faces = ugrid.faces
+  coo   = ugrid.nodes
+
+  vpts = {}
+  for kw in varkws:
+    vpts[kw] = np.zeros(x.shape)
+
+  ptstriang = ugrid.locate_faces(np.array([x, y]).T)
+  triangs   = np.unique(ptstriang)
+  discont = np.empty(0, dtype=int)
+
+  for tr_i in range(len(triangs)):
+    pts_i       = np.where(ptstriang == triangs[tr_i])[0]
+    pts_bary    = xytobary(x[pts_i], y[pts_i], coo[faces[triangs[tr_i]],0],
+                           coo[faces[triangs[tr_i]],1])
+    for kw in varkws:
+      v = ugrid.data[kw]
+      vpts[kw][pts_i] = np.dot(pts_bary, v.data[time,:][faces[triangs[tr_i]]])
+    discont     = np.append(discont, pts_i[0])
+
+  discont = np.sort(discont)[::-1]
+
+  for di in range(len(discont)-1):
+    x    = np.insert(x   , discont[di], np.nan)
+    y    = np.insert(y   , discont[di], np.nan)
+    for kw in varkws:
+      vpts[kw] = np.insert(vpts[kw], discont[di], np.nan)
+
+  return x, y, vpts
+
+
+class QuadUGRID:
+  """
+  2D quadrature on UGRID grids (using pyugrid)
+  """
+
+  def __init__(self, DGdegree, QuadExactness):
+
+    self.N    = DGdegree
+    self.NQ   = QuadExactness
+
+    f = np.finfo(float)
+
+    # obtain Lagrange points and map them from (x,y) on equilateral triangle to
+    # barycentric coordinates / (r,s) on right triangle
+    xt, yt = interp.Nodes2D(self.N)
+    r, s   = trmap.xytors(xt, yt)
+    self.dofcoo = trmap.xytobaryequilat(xt, yt)
+
+    # compute Vandermonde matrix and its inverse, cuttoff values smaller than
+    # machine resolution
+    vander    = interp.Vandermonde2D(self.N, r, s)
+    vander[abs(vander) < f.resolution] = 0.0
+
+    vanderinv = np.linalg.inv(vander)
+    vanderinv[abs(vanderinv) < f.resolution] = 0.0
+
+    # compute quadrature weights and barycentric coordinates
+    self.wei, gl = quad.readGaussTriangle(self.NQ) # weights and coordinates on right triangle
+    self.npts    = self.wei.size                   # number of Gauss points
+    # map to barycentric coordinates
+    self.quadcoo = trmap.rstobaryright(gl[:,0], gl[:,1])
+
+    # compute node values of nodal (Lagrange) basis function
+    self.psi     = np.dot(interp.Vandermonde2D(self.N, gl[:,0], gl[:,1]), vanderinv)
+    self.psi[abs(self.psi) < f.resolution] = 0.0
+
+  def __call__(self, ugrid, arg, fcn=None, timeslice=0):
+    """
+    compute intregal by quadrature rule
+    """
+    coonod = ugrid.nodes
+    faces  = ugrid.faces
+
+    if type(arg) is types.StringType:
+      argdata = ugrid.data[arg].data[timeslice]
+      # check that this is a nodal variable!
+    elif type(arg) is types.ListType:
+      argdata = {}
+      for i in range(len(arg)):
+        argdata[arg[i]] = ugrid.data[arg[i]].data[timeslice]
+      # check that this is a nodal variable!
+
+    if type(fcn) is types.NoneType:
+      fcn = lambda x: x
+
+    quadf = 0.0
+    for iface in range(faces.shape[0]):
+      ctri = coonod[faces[iface]]
+      area = 0.5*np.abs((ctri[0,0]-ctri[2,0])*(ctri[1,1]-ctri[0,1]) -
+                        (ctri[0,0]-ctri[1,0])*(ctri[2,1]-ctri[0,1]))
+
+      if type(arg) is types.FunctionType:
+        cooquad = np.dot(self.quadcoo, ctri).T
+        dataqcoo = arg(cooquad)
+      elif type(arg) is types.StringType:
+        dataqcoo = np.dot(self.psi, argdata[faces[iface]])
+      elif type(arg) is types.ListType:
+        dataqcoo = {}
+        for i in range(len(arg)):
+          dataqcoo[arg[i]] = np.dot(self.psi, argdata[arg[i]][faces[iface]])
+
+      quadf = quadf + np.dot(self.wei, fcn(dataqcoo))/self.wei.sum()*area
+
+    return quadf

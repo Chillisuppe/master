@@ -1,0 +1,114 @@
+#-----------------------------------------------------------
+# Input file for batch mode input
+# input is controlled via keywords
+#
+# j. behrens 12/96
+#-----------------------------------------------------------
+# the experiment no. (0 for a new experiment)     [integer]
+EXPERIMENT_NUMBER
+0
+# desired maximum level of refinements            [integer]
+FINE_GRID_LEVEL
+10
+# minimum level of refinements                    [integer]
+COARSE_GRID_LEVEL
+4
+# tolerance for refinement                        [real]
+TOLERANCE_OF_REFINEMENT
+0.02
+# tolerance for coarsening                        [real]
+TOLERANCE_OF_COARSENING
+0.01
+# watermark for refinement                        [real]
+WATERMARK_OF_REFINEMENT
+0.01
+# watermark for coarsening                        [real]
+WATERMARK_OF_COARSENING
+0.001
+# timestepping scheme (euler, rk22, rk33, rk34, rk35)  [character]
+TIMESTEPPING
+rk22
+# first timestep                                  [integer]
+BEGINNING_TIMESTEP
+1
+# initial experiment modeltime
+TIMESTEPPING_START_TIME
+0.0
+# final experiment modeltime
+TIMESTEPPING_END_TIME
+4.0
+# maximum CFL number for time stepping
+MAX_CFL_NUMBER
+0.2
+# plot in NetCDF style to file (no plot = 0)      [integer]
+NETCDF_FILE_PLOTTING
+1
+# equidist. subtriang pts per edge (default: 2)   [integer]
+SUBTRIANG_PTS
+2
+# plot in vtu style for paraview (no plot = 0)    [integer]
+VTU_FILE_PLOTTING
+0
+# plot analytic solution to file (no plot = 0)    [integer]
+ANASOL_PLOTTING
+1
+# time interval between plots                     [real]
+TIME_BTW_PLOTS
+0.2
+# timesteps between saves                         [integer]
+STEPS_BTW_SAVES
+5000
+# diagnostics (on = 1, off = 0)                   [integer]
+DIAGNOSTICS
+0
+# steps between diagnostics                       [integer]
+STEPS_BTW_DIAG
+100
+# save last timestep for next experiment (no = 0) [integer]
+SAVE_FINISH_CONFIGURATION
+0
+# file defining the domain                        [character]
+DOMAIN_FILE_NAME
+Domain.dat
+# file defining the initial triangulation         [character]
+TRIANG_FILE_NAME
+Triang_4by2_period_fine.dat
+# number of signature files provided              [integer]
+NUM_SIGNATURE_FILES
+1
+# signature file name                             [character]
+SIGNATURE_FILE_NAME
+dg_linear.ftf
+#-----------------------------------------------------------
+# equation specific parameters
+#-----------------------------------------------------------
+# viscosity                                       [real]
+VISCOSITY
+0.0
+# bottom friction                                 [real]
+BOTTOM_FRIC
+0.0
+# wind friction                                   [real]
+WIND_FRIC
+0.0
+# bathymetric depth (uniform) of the basin        [real]
+BATHY_PARAM_DEPTH
+1.0
+#-----------------------------------------------------------
+# test specific parameters
+#-----------------------------------------------------------
+# vortex center                                   [real]
+CENTER_POINT
+2.0 1.0
+# Velocity of backround drift                     [real]
+DRIFT_VELOCITY
+1.0 0.0
+# radius of vortex                                [real]
+VORTEX_RADIUS
+0.45
+# maximum tangential velocity of vortex           [real]
+VTANG_MAX
+0.5
+#-----------------------------------------------------------
+# END OF FILE
+#-----------------------------------------------------------

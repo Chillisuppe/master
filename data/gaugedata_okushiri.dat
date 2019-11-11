@@ -1,0 +1,14 @@
+# Data file for gauge information
+# contains: number of gauges, gauge coordinates and gauge names
+# - gauge names should be no longer than 14 characters including spaces,
+#   otherwise they are truncated
+NUM_GAUGES
+3
+GAUGE_COORDINATES
+4.521  1.196
+4.521  1.696
+4.521  2.196
+GAUGE_NAMES
+gauge 5
+gauge 7
+gauge 9

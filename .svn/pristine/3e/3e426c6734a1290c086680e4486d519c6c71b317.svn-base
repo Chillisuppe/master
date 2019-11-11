@@ -1,0 +1,984 @@
+!*******************************************************************************
+!
+!> @file  ADV_dg.F90
+!> @brief contains module ADV_dg
+!
+!*******************************************************************************
+!
+! VERSION(S):
+!   1. original version                       j. behrens      10/96
+!   2. several improvements/fixes             j. behrens      11/96-1/97
+!   3. nodal values time depend.              j. behrens      01/97
+!   4. stop_watch removed, plot               j. behrens      01/97
+!      (position) changed, inner
+!      iteration counter added
+!   5. fvm_adapt changed                      j. behrens      02/97
+!   6. fvm_adapt changed to hide
+!      grid data structures                   j. behrens      07/97
+!   7. control data structure                 j. behrens      12/97
+!   8. non-homog. rhs added                   j. behrens      02/98
+!   9. compliant to amatos 1.0                j. behrens      12/2000
+!  10. compliant to amatos 1.2                j. behrens      03/2002
+!  11. compliant to amatos 2.0                j. behrens      07/2003
+!  12. added visnetplot                       f. klaschka     12/2003
+!  13. added iteration counter
+!      and cfl-criterion                      schlicht,ziemer 08/2007
+!  14. added print-screen-lines
+!      just for checking                      w.pranowo       06/2008
+!  15. Put initial excitation                 w.pranowo       08/2008
+!      to the initial grid
+!      before grid-adaptation
+!  16. parameters of fvm_fluxvelo             m. boehme,     09/2008
+!      in fvm_velocity changed                s. juricke,
+!                                             t. rackow
+!  17. ssh correction for ground              m. boehme,     10/2008
+!      hitting of wave in                     s. juricke,
+!      fvm_ssh                                t. rackow
+!  18. in fvm_adapt changed query             m. boehme,     03/2009
+!      for CFL criterion to '.OR.'            s. juricke,
+!                                             t. rackow
+!  19. call of long channel test              m. boehme,     03/2009
+!      case in fvm_adapt (optional)           s. juricke,
+!      (ssh_constantslope)                    t. rackow
+!  20. merged version                         j. behrens     05/2009
+!  21. new evolution form                     j. behrens     08/2009
+!  22. exported diagnostics                   j. behrens     08/2009
+!  23. added paraview output                  n.beisiegel    01/2011
+!  24. put some routines from ADV_update here n.beisiegel    12/2011
+!
+!*******************************************************************************
+! DESCRIPTION:
+!> @brief performs finite volume advection
+!>
+!> adaption based on infinity norm
+!
+MODULE ADV_dg
+
+  USE GRID_api
+  USE FLASH_parameters
+  USE MISC_utils
+  USE MISC_timing
+  USE IO_paraplot_dg
+#ifdef USE_NETCDF
+  USE IO_netcdfplot
+#endif
+  USE IO_utils, ONLY : io_putruntimeinfo, io_putinputfile
+  USE DG_errorestimate
+  USE DG_initial, ONLY : fvm_initialvalues, fvm_initialvalues_iter, source_update, dg_elmt_solution
+  USE DG_timestepping
+  USE DG_utils, ONLY : compute_edgeinfo, fvm_createmetrics, Vandermonde2D
+  USE MISC_diag
+  USE DG_cfl
+  USE DG_equation
+
+  PRIVATE
+  PUBLIC  :: fvm_initialize, fvm_finish, fvm_timestepping
+
+  CONTAINS
+
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE fvm_adapt]:
+!> @brief adapts the grid according to an error estimate
+!
+!> @param[in,out]   p_ghand           grid handling data structure
+!> @param[in]       p_param           control structure for global parameters
+!> @param[out]      l_changed         flag for changed grid
+!> @param[in]       i_faceunknowns    number of DOFs per element
+!> @param[in]       i_numdofs         total number of DOFs
+!> @param[in]       i_numelmt         total number of elements
+!> @param[in]       i_numnode         total number of nodes
+!> @param[in]       i_numedge         total number of edges
+!> @param[in]       r_evander
+!> @param[in]       r_elmtwidth
+!> @param[in]       r_metrics_inv
+!> @param[in]       i_elmtdofs
+!> @param[in]       i_elementnodes
+!> @param[in]       i_nodepatch
+!> @param[in]       i_edgeinfo
+!> @param[in]       i_elmtlev
+!> @param[in]       i_elmtstatus
+!> @param[in]       r_Q_next
+!> @param[in]       r_S
+!> @param[in]       l_water           suggestion: switch if refinement/coarsening should only be
+!>                                    done if threshold given by r_refwatermark,
+!>                                    r_crswatermark is attained
+!> @param           i_news
+!
+  SUBROUTINE fvm_adapt(p_ghand, p_param, l_changed, &
+                       i_faceunknowns, i_numdofs, i_numelmt, i_numnode, i_numedge, &
+                       r_evander, r_elmtwidth, r_metrics_inv, i_elmtdofs, i_elementnodes, i_nodepatch, &
+                       i_edgeinfo, i_elmtlev, i_elmtstatus, r_Q_next, r_S, l_water, i_news)
+
+    IMPLICIT NONE
+
+    TYPE (grid_handle), INTENT(inout)                     :: p_ghand
+    TYPE (control_struct), INTENT(in)                     :: p_param
+    LOGICAL, INTENT(out)                                  :: l_changed
+    INTEGER (KIND = GRID_SI), INTENT(in)                  :: i_faceunknowns, i_numdofs, &
+                                                             i_numelmt, i_numnode, i_numedge
+    INTEGER (KIND = GRID_SI), DIMENSION(:,:), INTENT(in)  :: i_elmtdofs, i_elementnodes, &
+                                                             i_nodepatch, i_edgeinfo
+    INTEGER (KIND = GRID_SI), DIMENSION(:), INTENT(in)    :: i_elmtlev, i_elmtstatus
+    REAL (KIND = GRID_SR), DIMENSION(:), INTENT(in)       :: r_elmtwidth
+    REAL (KIND = GRID_SR), DIMENSION(:,:,:), INTENT(in)   :: r_metrics_inv
+    REAL (KIND = GRID_SR), DIMENSION(:,:), INTENT(in)     :: r_Q_next, r_S, r_evander
+    LOGICAL, OPTIONAL, INTENT(in)                         :: l_water
+    INTEGER (KIND = GRID_SI), OPTIONAL                    :: i_news
+
+!--- local declarations
+    LOGICAL                                               :: l_switch
+    REAL (KIND = GRID_SR)                                 :: r_errmx, r_refcrit, &
+                                                             r_crscrit, r_fac
+    INTEGER (KIND = GRID_SI)                              :: i_manyc, i_manyr, &
+                                                             i_alct, i_cnt, i_tagenv, &
+                                                             i_env, i_patch, i_node, i_elmt_p
+    REAL (KIND = GRID_SR), DIMENSION(:), ALLOCATABLE      :: r_aux1
+    INTEGER (KIND = GRID_SI), DIMENSION(:), ALLOCATABLE   :: i_aux2, i_aux3, i_auxtmp
+    LOGICAL                                               :: l_ref, l_crs
+    REAL (KIND = GRID_SR), DIMENSION(:), ALLOCATABLE      :: r_cfl
+
+!--- initialize refinement flag
+    l_changed = .FALSE.
+
+!--- return immediately, if nothing is to do...
+    IF((p_param%num%i_reflevel - p_param%num%i_crslevel) < 1_GRID_SI) RETURN
+
+!--- initialize parameter for patch refinement
+    i_tagenv = p_param%num%i_refneigh
+
+!--- handle watermark switch
+    wat_present: IF(PRESENT(l_water)) THEN
+      l_switch = l_water
+    ELSE wat_present
+      l_switch = .TRUE.
+    END IF wat_present
+
+!--- allocate workspace
+    ALLOCATE(r_aux1(i_numelmt), r_cfl(i_numelmt), &
+             i_aux2(i_numelmt), i_aux3(i_numelmt), i_auxtmp(i_numelmt), stat=i_alct)
+    IF(i_alct /= 0) THEN
+      CALL grid_error(c_error='[fvm_adapt]: Could not allocate auxiliary variables')
+    END IF
+
+!--- set array of local cfl numbers to 0.1 until we initialize it correctly
+    r_cfl = 0.1_GRID_SR
+
+!--- evaluate local refinement indicator per element
+    CALL dg_errorest(p_ghand, r_aux1, i_faceunknowns, i_numdofs, i_numelmt, &
+                     i_numnode, i_numedge, r_evander, r_elmtwidth, i_elmtdofs, &
+                     i_edgeinfo, r_metrics_inv, r_Q_next, r_S)
+
+!--- set coarsening/refinement criterion: max gradient
+    r_errmx  = maxval(r_aux1(1:i_numelmt))
+    r_crscrit= r_errmx* p_param%num%r_crstolerance
+    r_refcrit= r_errmx* p_param%num%r_reftolerance
+
+!--- refinement info
+    DO i_cnt=1,i_numelmt
+      i_aux2(i_cnt) = 0
+      i_auxtmp(i_cnt) = 0
+      IF((i_elmtlev(i_cnt) < p_param%num%i_reflevel) .AND. &
+         (r_aux1(i_cnt) > r_refcrit) .AND. (r_cfl(i_cnt) < 0.7)) &
+        i_aux2(i_cnt) = GRID_pleaserefine
+    END DO
+
+!--- if a region around the element is to be refined as well, compute
+    DO i_env=1,i_tagenv
+      DO i_cnt =1,i_numelmt
+        IF (i_aux2(i_cnt) == GRID_pleaserefine) THEN
+          DO i_node=1,3
+            DO i_elmt_p=1,GRID_patchelements
+              i_patch = i_nodepatch(i_elmt_p, i_elementnodes(i_node, i_cnt))
+              IF (i_patch > 0) THEN
+                IF (i_elmtlev(i_patch) < p_param%num%i_reflevel) i_auxtmp(i_patch) = GRID_pleaserefine
+              END IF
+            END DO !i_elmt_p
+          END DO !i_node
+        END IF
+      END DO !i_cnt
+    END DO !i_env
+
+!--- merge with temporary array
+    i_aux2 = MERGE(i_aux2, i_auxtmp, i_aux2==GRID_pleaserefine)
+
+!--- coarsening info
+    DO i_cnt=1,i_numelmt
+      IF((i_elmtlev(i_cnt) > p_param%num%i_crslevel) .AND. &
+         ((r_aux1(i_cnt) < r_crscrit) .OR. (r_cfl(i_cnt) > 1)) .AND. &
+         (i_aux2(i_cnt) /= GRID_pleaserefine)) &
+        i_aux2(i_cnt) = GRID_pleasecoarse
+    END DO
+
+!--- determine if there is enough to be done (this can be
+!--- switched off by l_water=.FALSE.)
+
+    IF(l_switch) THEN
+      i_manyr = count(i_aux2 == GRID_pleaserefine)
+      r_fac   = real(i_manyr,GRID_SR)/ real(i_numelmt,GRID_SR)
+      enough_ref: IF(r_fac > p_param%num%r_refwatermark) THEN
+        l_ref= .TRUE.
+      ELSE
+        l_ref= .FALSE.
+      END IF enough_ref
+
+      i_manyc = count(i_aux2 == GRID_pleasecoarse)
+      r_fac   = real(i_manyc,GRID_SR)/ real(i_numelmt,GRID_SR)
+      enough_crs: IF(r_fac > p_param%num%r_crswatermark) THEN
+        l_crs= .TRUE.
+      ELSE
+        l_crs= .FALSE.
+      END IF enough_crs
+    ELSE
+      l_ref= .TRUE.
+      l_crs= .TRUE.
+    END IF !l_switch=.TRUE.
+
+!--- update grid flags/ elementstatus
+    i_aux3 = i_elmtstatus
+    update: IF(l_ref .OR. l_crs) THEN
+      IF(l_ref) i_aux3 = merge(i_aux2, i_aux3, i_aux2==GRID_pleaserefine)
+      IF(l_crs) i_aux3 = merge(i_aux2, i_aux3, i_aux2==GRID_pleasecoarse)
+      CALL grid_putinfo(p_ghand, l_finelevel=.TRUE., i_elementstatus=i_aux3)
+    END IF update
+
+!--- deallocate work arrays
+
+    DEALLOCATE(r_aux1, r_cfl, i_aux2, i_aux3, i_auxtmp)
+
+!--- adapt the grid
+    CALL grid_adapt(p_ghand, l_changed)
+
+  END SUBROUTINE fvm_adapt
+
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE fvm_initialize]:
+!> @brief initialize the advection problem
+!
+!> @param[in,out]      p_ghand     grid handling data structure
+!> @param[in,out]      p_param     control structure for global parameters
+!
+  SUBROUTINE fvm_initialize(p_ghand, p_param)
+
+    IMPLICIT NONE
+
+!--- local declarations
+    TYPE (grid_handle), DIMENSION(:), INTENT(inout)            :: p_ghand
+    TYPE (control_struct), INTENT(inout)                       :: p_param
+
+    CHARACTER (len=32)                                         :: c_file
+    CHARACTER (len=28)                                         :: c_tmp
+    LOGICAL                                                    :: l_refined
+    INTEGER (KIND = GRID_SI)                                   :: i_tmp, i_alct, &
+      i_vertnum, i_degree, i_faceunknowns, i_numdofs, i_numelmt, i_numnode, i_numedge
+    REAL (KIND = GRID_SR), DIMENSION(:,:), POINTER             :: r_vertinit
+    INTEGER (KIND = GRID_SI)                                   :: i_maxit=20, i_its=0
+    INTEGER (KIND = GRID_SI)                                   :: i_refdepth
+    INTEGER (KIND = GRID_SI), DIMENSION(:), ALLOCATABLE        :: i_elmtlev, i_elmtstatus, &
+      i_edgeboundary
+    INTEGER (KIND = GRID_SI), DIMENSION(:,:), ALLOCATABLE      :: i_elementnodes, i_elementedges, &
+      i_elementdofs, i_nodepatch, i_edgeinfo, i_edgenodes
+    REAL (KIND = GRID_SR), DIMENSION(:), ALLOCATABLE           :: r_elmtwidth, r_hmin, &
+      r_elmtvolume, r_edgelength, r_cfllocal
+    REAL (KIND = GRID_SR), DIMENSION(:,:), ALLOCATABLE         :: r_evander, r_einvvander, &
+      r_coonod, r_coodof, r_Q, r_S, r_normals, r_sol
+    REAL (KIND = GRID_SR), DIMENSION(:,:,:), ALLOCATABLE       :: r_metrics_inv
+
+!--- determine refinement depth, we will need this for the refinement iteration
+    i_refdepth = p_param%num%i_reflevel - p_param%num%i_crslevel
+
+!--- compute Vandermonde matrices
+    i_degree       = GRID_femtypes%p_type(FEM_DG)%sig%i_degree
+    i_faceunknowns = GRID_femtypes%p_type(FEM_DG)%sig%i_unknowns
+
+    ALLOCATE(r_evander(i_faceunknowns, i_faceunknowns), &
+             r_einvvander(i_faceunknowns, i_faceunknowns), stat=i_alct)
+
+    CALL Vandermonde2D(i_degree, GRID_femtypes%p_type(FEM_DG)%sig%r_edofcoo, r_evander)
+    CALL compute_inverse(r_evander, r_einvvander)
+
+!--- decide whether a new experiment is startet or an old one is continued
+    new_experiment: IF(p_param%num%i_experiment <= 0) THEN
+
+!--- reset timesteps (start with 1 in any case)
+      time_one: IF(p_param%num%i_frsttimestep > 1) THEN
+        IF(GRID_parameters%iolog > 0) &
+          write(GRID_parameters%iolog,*) 'WARNING      : Timestep counters reset due to new experiment'
+        IF (p_param%num%i_lasttimestep > 0) THEN
+          p_param%num%i_lasttimestep = p_param%num%i_lasttimestep - p_param%num%i_frsttimestep + 1
+        END IF
+        p_param%num%i_frsttimestep = 1
+      END IF time_one
+
+      IF (p_param%num%i_lasttimestep == -1) THEN
+        p_timestepinfo%r_timestep = 1.0_GRID_SR
+      ELSE
+        p_timestepinfo%r_timestep = p_param%num%r_deltatime
+      END IF
+
+!--- initialize timestep info structure
+      p_timestepinfo%i_step      = p_param%num%i_frsttimestep - 1
+      p_timestepinfo%i_adapit    = 0
+      p_timestepinfo%l_ploted    = .FALSE.
+      p_timestepinfo%l_saved     = .FALSE.
+      p_timestepinfo%l_diaged    = .FALSE.
+      p_timestepinfo%r_modeltime = p_param%num%r_starttime
+      p_timestepinfo%r_cputime   = 0.0_GRID_SR
+
+!--- initialize grid parameters
+      CALL grid_setparameter(p_ghand, i_coarselevel=p_param%num%i_crslevel, &
+                             i_finelevel=p_param%num%i_reflevel)
+
+!--- define domain, first read data from file (compiled here)
+      CALL grid_readdomain(i_vertnum, r_vertinit, c_readfile=p_param%io%c_domainfile)
+      CALL grid_definegeometry(i_vertnum, r_vertexarr=r_vertinit)
+
+!--- create initial triangulation
+      CALL grid_createinitial(p_ghand, c_filename=p_param%io%c_triangfile)
+
+!--- initialize grid and adapt at steep gradients
+      l_refined = .TRUE.
+
+      IF(i_refdepth < 1_GRID_SI) l_refined = .FALSE.
+
+      i_numelmt = p_ghand(i_timeplus)%i_enumfine
+      i_numnode = p_ghand(i_timeplus)%i_nnumber
+      i_numdofs = i_numelmt*i_faceunknowns
+      i_numedge = p_ghand(i_timeplus)%i_gnumfine
+
+!--- this is an initial values function called only once (and before the adaptation loop)
+      CALL fvm_initialvalues(p_ghand(i_timeplus), p_param, p_timestepinfo%r_modeltime)
+
+!--- for dynamic adaptivity - iterate until refdepth is reached
+      refine_loop: DO WHILE (l_refined .AND. i_its < i_maxit)
+        i_its     = i_its+1
+        l_refined = .FALSE.
+
+! !--- this is an initial values function called multiple times in the adaptation loop
+!         CALL fvm_initialvalues_iter(p_ghand(i_timeplus), p_param, , p_timestepinfo%r_modeltime)
+
+!--- get grid-based info only for initialization or when grid has changed
+        ALLOCATE(i_elementnodes(GRID_elementnodes,i_numelmt), &
+                 i_elementdofs(i_faceunknowns, i_numelmt), &
+                 i_elementedges(GRID_elementedges,i_numelmt), &
+                 r_elmtwidth(i_numelmt), &
+                 i_edgeinfo(4,i_numedge), &
+                 i_edgenodes(2,i_numedge), &
+                 i_edgeboundary(i_numedge), &
+                 r_coonod(GRID_dimension,i_numnode), &
+                 i_nodepatch(GRID_patchelements,i_numnode), &
+                 i_elmtlev(i_numelmt), i_elmtstatus(i_numelmt), &
+                 r_normals(GRID_dimension, i_numedge), &
+                 r_metrics_inv(GRID_dimension,GRID_dimension,i_numelmt), &
+                 r_elmtvolume(i_numelmt), &
+                 r_edgelength(i_numedge), &
+                 r_Q(i_nprogvars, i_numdofs), &
+                 r_S(i_nsrcterms, i_numdofs), &
+                 r_hmin(i_numnode), &
+                 r_cfllocal(i_numelmt), stat=i_alct)
+        CALL grid_getinfo(p_ghand(i_timeplus), i_femtype=FEM_DG, l_relative=.TRUE., &
+                          l_finelevel=.TRUE., i_elementnodes=i_elementnodes, &
+                          i_elementdofs=i_elementdofs, i_elementedges=i_elementedges, &
+                          r_elementwidth=r_elmtwidth, &
+                          i_edgeelements=i_edgeinfo(3:4,:), i_edgenodes=i_edgenodes, &
+                          i_edgeboundary=i_edgeboundary, r_nodecoordinates=r_coonod, &
+                          i_nodepatch=i_nodepatch, i_elementlevel=i_elmtlev, &
+                          i_elementstatus=i_elmtstatus, i_arraypoint=i_valQ, r_dofvalues=r_Q)
+        IF (i_nsrcterms > 0) THEN
+          CALL grid_getinfo(p_ghand(i_timeplus), i_femtype=FEM_DG, l_relative=.TRUE., &
+                            l_finelevel=.TRUE., i_arraypoint=i_valS, r_dofvalues=r_S)
+        END IF
+
+!--- get all grid dependent matrix terms
+        CALL compute_edgeinfo(i_numedge, i_elementedges, i_edgeboundary, i_edgeinfo)
+
+        CALL fvm_createmetrics(p_ghand(i_timeplus), r_metrics_inv, r_elmtvolume, &
+                               r_edgelength, r_hmin, r_normals, i_edgeinfo, &
+                               i_elementnodes, i_elementedges, r_coonod)
+
+!--- compute CFL-number, note this only correct for constant timestep sizes!
+        CALL compute_cfl(p_ghand(i_timeplus), r_Q, r_S, r_hmin, i_faceunknowns, &
+                         i_elementnodes, i_elementdofs, p_timestepinfo, r_cfllocal)
+! TODO: use local CFL number for grid adaption when using constant timestep sizes!
+        CALL fvm_adapt(p_ghand(i_timeplus), p_param, l_refined, &
+                       i_faceunknowns, i_numdofs, i_numelmt, i_numnode, i_numedge, &
+                       r_evander, r_elmtwidth, r_metrics_inv, i_elementdofs, i_elementnodes, &
+                       i_nodepatch, i_edgeinfo, i_elmtlev, i_elmtstatus, r_Q, r_S, l_water=.FALSE.)
+        DEALLOCATE(i_elementnodes, i_elementdofs, i_elementedges, r_elmtwidth, &
+                   i_edgeinfo, i_edgenodes, i_edgeboundary, r_coonod, i_nodepatch, &
+                   i_elmtlev, i_elmtstatus, r_normals, r_metrics_inv, r_elmtvolume, &
+                   r_edgelength, r_Q, r_S, r_hmin, r_cfllocal)
+
+!--- adjust number of dofs according to new grid
+        i_numelmt = p_ghand(i_timeplus)%i_enumfine
+        i_numnode = p_ghand(i_timeplus)%i_nnumber
+        i_numdofs = i_numelmt*i_faceunknowns
+        i_numedge = p_ghand(i_timeplus)%i_gnumfine
+
+!--- write initial conditions to new grid
+        CALL fvm_initialvalues_iter(p_ghand(i_timeplus), p_param, p_timestepinfo%r_modeltime)
+
+      END DO refine_loop
+
+!--- write initial data and perform initial diagnostics
+      ALLOCATE(i_elementnodes(3,i_numelmt), &
+               i_elementdofs(i_faceunknowns, i_numelmt), &
+               i_elementedges(GRID_elementedges,i_numelmt), &
+               i_edgeinfo(4,i_numedge), &
+               i_edgenodes(2,i_numedge), &
+               i_edgeboundary(i_numedge), &
+               r_coonod(GRID_dimension,i_numnode), &
+               r_coodof(GRID_dimension,i_numdofs), &
+               r_Q(i_nprogvars, i_numdofs), &
+               r_S(i_nsrcterms, i_numdofs), &
+               r_normals(GRID_dimension, i_numedge), &
+               r_metrics_inv(GRID_dimension,GRID_dimension,i_numelmt), &
+               r_elmtvolume(i_numelmt), &
+               r_edgelength(i_numedge), &
+               r_hmin(i_numnode), &
+               r_cfllocal(i_numelmt), &
+               r_sol(i_nprogvars, i_faceunknowns*i_numelmt), stat=i_alct)
+      CALL grid_getinfo(p_ghand(i_timeplus), i_femtype=FEM_DG, l_relative=.TRUE., &
+                        l_finelevel=.TRUE., i_elementnodes=i_elementnodes, &
+                        i_elementdofs=i_elementdofs, i_elementedges=i_elementedges, &
+                        i_edgeelements=i_edgeinfo(3:4,:), i_edgenodes=i_edgenodes, &
+                        i_edgeboundary=i_edgeboundary, r_nodecoordinates=r_coonod, &
+                        r_dofcoordinates=r_coodof, i_arraypoint=i_valQ, r_dofvalues=r_Q)
+      IF (i_nsrcterms > 0) THEN
+        CALL grid_getinfo(p_ghand(i_timeplus), i_femtype=FEM_DG, l_relative=.TRUE., &
+                          l_finelevel=.TRUE., i_arraypoint=i_valS, r_dofvalues=r_S)
+      END IF
+
+!--- get all grid dependent matrix terms
+      CALL compute_edgeinfo(i_numedge, i_elementedges, i_edgeboundary, i_edgeinfo)
+      CALL fvm_createmetrics(p_ghand(i_timeplus), r_metrics_inv, r_elmtvolume, &
+                             r_edgelength, r_hmin, r_normals, i_edgeinfo, &
+                             i_elementnodes, i_elementedges, r_coonod)
+
+!--- compute CFL-number
+      CALL compute_cfl(p_ghand(i_timeplus), r_Q, r_S, r_hmin, i_faceunknowns, &
+                       i_elementnodes, i_elementdofs, p_timestepinfo, r_cfllocal)
+      IF (p_param%num%i_lasttimestep == -1) THEN
+        p_timestepinfo%r_timestep  = p_param%num%r_cflmax / p_timestepinfo%r_cflnumber
+        p_timestepinfo%r_cflnumber = p_param%num%r_cflmax
+      END IF
+
+!--- if diagnostics are demanded, initialize diagnostical output, and perform diagnostics on initial data
+      IF(p_param%io%l_diagnostics) THEN
+        CALL diag_initialize(p_ghand(i_timeplus), p_param, i_faceunknowns, r_einvvander)
+        CALL diag_diagnostics(p_ghand(i_timeplus), p_param, p_timestepinfo, &
+                              i_elementnodes, i_elementdofs, r_coonod, r_coodof, r_Q, r_S)
+      END IF
+
+!--- if plotting is demanded, plot initial data
+      IF((p_param%io%l_para) .OR. (p_param%io%l_netcdf)) THEN
+
+!--- compute analytical solution
+        CALL dg_elmt_solution(r_coodof, p_timestepinfo%r_modeltime, i_numelmt, &
+                              i_elementdofs, r_coonod, i_elementnodes, r_sol)
+
+        IF(p_param%io%l_para) THEN
+          CALL plot_para_dg(p_ghand(i_timeplus), p_param, 0, p_timestepinfo%r_modeltime, &
+                            i_faceunknowns, i_degree, i_numelmt, i_numnode, i_elementnodes, &
+                            i_elementdofs, r_coonod, r_coodof, r_Q, r_S, r_sol, p_param%io%l_solplot)
+        END IF
+
+        IF(p_param%io%l_netcdf) THEN
+#ifdef USE_NETCDF
+          CALL plot_netcdf(p_ghand(i_timeplus), 0, p_timestepinfo%r_modeltime, i_numnode, &
+                           i_numelmt, i_numedge, i_elementnodes, i_elementdofs, i_edgenodes, &
+                           r_coonod, r_coodof, r_Q, r_S, r_sol, r_einvvander, &
+                           p_param%io%i_subtriangpts, p_param%io%l_solplot)
+#else
+          CALL grid_error(c_error='[fvm_timestepping]: NetCDF library not installed - cannot write data!')
+#endif
+        END IF
+      END IF
+
+      DEALLOCATE(i_elementnodes, i_elementdofs, i_elementedges, i_edgeinfo, &
+                 i_edgenodes, i_edgeboundary, r_coonod, r_coodof, r_Q, r_S, &
+                 r_normals, r_metrics_inv, r_elmtvolume, r_edgelength, r_hmin, &
+                 r_cfllocal, r_sol)
+
+!--- if an old experiment is to be continued from stored data:
+    ELSE new_experiment
+
+!--- create grid from saveset, first compile filename
+      i_tmp = p_param%num%i_experiment - 1
+      WRITE(c_tmp,*) TRIM(GRID_parameters%program_name), '_save.'
+      WRITE(c_file,'(a28,i4.4)') TRIM(c_tmp), i_tmp
+      c_file= ADJUSTL(c_file)
+
+      CALL grid_readinitial(p_ghand, c_file)
+
+!--- initialize timestep info structure (to be modified!)
+      p_timestepinfo%i_step      = p_param%num%i_frsttimestep - 1
+      p_timestepinfo%i_adapit    = 0
+      p_timestepinfo%l_ploted    = .FALSE.
+      p_timestepinfo%l_saved     = .FALSE.
+      p_timestepinfo%l_diaged    = .FALSE.
+      p_timestepinfo%r_modeltime = p_param%num%r_starttime
+      p_timestepinfo%r_cputime   = 0.0_GRID_SR
+
+!--- initialize timestep size to something useful (this will be overwritten anyway)
+      IF (p_param%num%i_lasttimestep > 0) THEN
+        p_timestepinfo%r_timestep = p_param%num%r_deltatime
+      ELSE
+        p_timestepinfo%r_timestep = 1.0_GRID_SR
+      END IF
+
+!--- if diagnostics are demanded, initialize diagnostical output
+      IF(p_param%io%l_diagnostics) THEN
+        CALL diag_initialize(p_ghand(i_timeplus), p_param, i_faceunknowns, r_einvvander)
+      END IF
+
+    END IF new_experiment
+
+!--- deallocate workspace
+    DEALLOCATE(r_evander, r_einvvander)
+
+  END SUBROUTINE fvm_initialize
+
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE fvm_finish]:
+!> @brief terminate the simulation (free dynamically alloc. memory, ...)
+!
+!> @param[in]      p_ghand     grid handling data structure
+!> @param[in]      p_param     control structure for global parameters
+!
+  SUBROUTINE fvm_finish(p_ghand, p_param)
+
+    IMPLICIT NONE
+
+!--- local declarations
+    TYPE (grid_handle), DIMENSION(:), INTENT(in) :: p_ghand
+    TYPE (control_struct), INTENT(in)            :: p_param
+
+    CHARACTER (len=32)                           :: c_file
+    CHARACTER (len=28)                           :: c_tmp
+    INTEGER                                      :: i_tmp
+
+!--- open and write saveset, if required
+    save_req: IF(p_param%io%i_savelast /= 0) THEN
+
+      i_tmp = p_param%num%i_experiment
+      WRITE(c_tmp,*) TRIM(GRID_parameters%program_name), '_save.'
+      WRITE(c_file,'(a28,i4.4)') TRIM(c_tmp), i_tmp
+      c_file = ADJUSTL(c_file)
+      CALL grid_writesaveset(c_file, p_ghand)
+
+!--- write parameter file for next experiment
+      IF (p_param%num%i_lasttimestep == -1) THEN
+        CALL io_putinputfile(p_param, p_timestepinfo%i_step + 1, p_timestepinfo%r_modeltime, &
+                             r_finaltime=p_timestepinfo%r_modeltime + &
+                             (p_param%num%r_finaltime-p_param%num%r_starttime))
+      ELSE
+        CALL io_putinputfile(p_param, p_timestepinfo%i_step + 1, p_timestepinfo%r_modeltime, &
+                             i_lasttimestep=p_timestepinfo%i_step + &
+                             (p_param%num%i_lasttimestep-p_param%num%i_frsttimestep) + 1)
+      END IF
+    END IF save_req
+
+  END SUBROUTINE fvm_finish
+
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE fvm_timestepping]:
+!> @brief perform the timestepping in the adaptive scheme
+!
+!> @param              p_ghand     grid handling data structure
+!> @param[in,out]      p_param     control structure for global parameters
+!
+  SUBROUTINE fvm_timestepping(p_ghand, p_param)
+
+    IMPLICIT NONE
+
+    TYPE (grid_handle), DIMENSION(:)                           :: p_ghand
+    TYPE (control_struct), INTENT(inout)                       :: p_param
+
+!--- local declarations
+    TYPE (sw_info)                                             :: p_time, p_timeaux
+    LOGICAL                                                    :: l_changed = .TRUE.
+    CHARACTER (len=32)                                         :: c_file
+    CHARACTER (len=28)                                         :: c_tmp
+    INTEGER (KIND = GRID_SI), PARAMETER                        :: i_innermax=15
+    INTEGER (KIND = GRID_SI)                                   :: i_tmp, i_alct
+    REAL (KIND = GRID_SR)                                      :: r_dt, r_nextplot
+    INTEGER (KIND = GRID_SI)                                   :: i_numelmt, i_numedge, i_numnode, &
+      i_faceunknowns, i_degree, i_numdofs, i_equadpts, i_gquadpts, i_gpsinonzero, i_stages
+    INTEGER (KIND = GRID_SI), DIMENSION(:), ALLOCATABLE        :: i_edgeboundary, i_gpsiidx, &
+      i_elmtlev, i_elmtstatus
+    INTEGER (KIND = GRID_SI), DIMENSION(:,:), ALLOCATABLE      :: i_edgenodes, i_edgeinfo, &
+      i_elementedges, i_elementnodes, i_elementdofs, i_nodepatch
+    REAL (KIND = GRID_SR), DIMENSION(:), ALLOCATABLE           :: r_elmtvolume, r_edgelength, &
+      r_elmtwidth, r_hmin, r_cfllocal, r_eqwei, r_gqwei
+    REAL (KIND = GRID_SR), DIMENSION(:,:), ALLOCATABLE         :: r_coeff, r_Q, r_Q_next, r_S, &
+      r_flux, r_normals, r_coonod, r_coodof, r_epsi, r_gpsi, r_edpsidxi, r_edpsideta, &
+      r_eMinvpsi, r_gMinvpsi, r_eMinvdpsidxi, r_eMinvdpsideta, r_Dxi, r_Deta, &
+      r_evander, r_einvvander, r_emassinv, r_gpsitmp, r_sol
+    REAL (KIND = GRID_SR), DIMENSION(:,:,:), ALLOCATABLE       :: r_metrics_inv
+
+!--- initialize stop watches
+    CALL stop_watch_init(5,(/'plotting        ', 'time evolution  ', 'grid adaption   ', &
+                             'diagnostics     ', 'whole timestep  '/), p_time)
+
+!--- read in coefficients for time stepping
+    CALL read_coefficients(p_param, i_stages, r_coeff)
+
+!--- put out initial information
+    CALL io_putruntimeinfo(p_ghand(i_timeplus), p_timestepinfo, p_time)
+
+    CALL stop_watch('start',5,p_time)
+
+!--- allocate matrices from signature file that keep size throughout and assign values
+    i_degree       = GRID_femtypes%p_type(FEM_DG)%sig%i_degree
+    i_faceunknowns = GRID_femtypes%p_type(FEM_DG)%sig%i_unknowns
+    i_equadpts     = GRID_femtypes%p_type(FEM_DG)%sig%i_equadpts
+    i_gquadpts     = GRID_femtypes%p_type(FEM_DG)%sig%i_gquadpts
+    i_gpsinonzero  = GRID_femtypes%p_type(FEM_DG)%sig%i_gpsinonzero
+
+    ALLOCATE(r_gqwei(i_gquadpts), &
+             r_gpsi(i_gpsinonzero, i_gquadpts), &
+             i_gpsiidx(i_gpsinonzero), &
+             r_eqwei(i_equadpts), &
+             r_epsi(i_faceunknowns, i_equadpts), &
+             r_edpsidxi(i_faceunknowns, i_equadpts), &
+             r_edpsideta(i_faceunknowns, i_equadpts), &
+             r_Dxi(i_faceunknowns, i_faceunknowns), &
+             r_Deta(i_faceunknowns, i_faceunknowns), &
+             r_evander(i_faceunknowns, i_faceunknowns), &
+             r_einvvander(i_faceunknowns, i_faceunknowns), &
+             r_emassinv(i_faceunknowns, i_faceunknowns), &
+             r_eMinvpsi(i_faceunknowns, i_equadpts), &
+             r_gMinvpsi(i_faceunknowns, i_gquadpts), &
+             r_eMinvdpsidxi(i_faceunknowns, i_equadpts), &
+             r_eMinvdpsideta(i_faceunknowns, i_equadpts), &
+             r_gpsitmp(i_faceunknowns, i_gquadpts))
+
+    r_gqwei    = GRID_femtypes%p_type(FEM_DG)%sig%r_gquadwei
+    r_gpsi     = GRID_femtypes%p_type(FEM_DG)%sig%r_gpsiquad
+    i_gpsiidx  = GRID_femtypes%p_type(FEM_DG)%sig%i_gpsiidx
+    r_eqwei    = GRID_femtypes%p_type(FEM_DG)%sig%r_equadwei
+    r_epsi     = GRID_femtypes%p_type(FEM_DG)%sig%r_epsiquad
+    r_Dxi      = GRID_femtypes%p_type(FEM_DG)%sig%r_dpsidxi
+    r_Deta     = GRID_femtypes%p_type(FEM_DG)%sig%r_dpsideta
+
+    CALL Vandermonde2D(i_degree, GRID_femtypes%p_type(FEM_DG)%sig%r_edofcoo, r_evander)
+    CALL compute_inverse(r_evander, r_einvvander)
+
+    r_edpsidxi  = MATMUL(r_Dxi , r_epsi)
+    r_edpsideta = MATMUL(r_Deta, r_epsi)
+    r_emassinv  = MATMUL(r_evander, TRANSPOSE(r_evander))
+
+    r_gpsitmp(:,:)         = 0.0_GRID_SR
+    r_gpsitmp(i_gpsiidx,:) = r_gpsi
+
+    r_gMinvpsi      = MATMUL(r_emassinv, r_gpsitmp)
+    r_eMinvpsi      = MATMUL(r_emassinv, r_epsi)
+    r_eMinvdpsidxi  = MATMUL(r_emassinv, r_edpsidxi)
+    r_eMinvdpsideta = MATMUL(r_emassinv, r_edpsideta)
+
+
+    IF (p_param%num%i_lasttimestep == -1) &
+      r_nextplot = MIN(p_timestepinfo%r_modeltime + p_param%io%r_plotint, p_param%num%r_finaltime)
+
+!--- timestep loop
+    time_loop: DO WHILE (((p_param%num%i_lasttimestep == -1) .AND. &
+                          (p_timestepinfo%r_modeltime < p_param%num%r_finaltime-GRID_EPS)) .OR. &
+                         (p_timestepinfo%i_step < p_param%num%i_lasttimestep))
+
+!--- initialize adaptivity counter
+      p_timestepinfo%i_adapit = 0
+
+!--- adaptive (inner) loop
+      adap_loop: DO WHILE((l_changed .OR. p_timestepinfo%i_adapit == 0) .AND. &
+                          (p_timestepinfo%i_adapit <= i_innermax))
+
+!--- count number of adaptive inner iterations. 0 means that no adaptation has taken place
+        p_timestepinfo%i_adapit = p_timestepinfo%i_adapit + 1
+
+!--- initialize grid dependend constants and vectors for the first timestep and when grid has changed
+        initialize: IF (l_changed) THEN
+
+!--- compute vector lengths
+          i_numelmt = p_ghand(i_timeplus)%i_enumfine
+          i_numedge = p_ghand(i_timeplus)%i_gnumfine
+          i_numnode = p_ghand(i_timeplus)%i_nnumber
+          i_numdofs = i_numelmt*i_faceunknowns
+
+!--- allocate all data needed
+          ALLOCATE(r_Q(i_nprogvars, i_numdofs), r_Q_next(i_nprogvars, i_numdofs), &
+                   r_S(i_nsrcterms, i_numdofs), stat=i_alct)
+          IF(i_alct /= 0) &
+            CALL grid_error(c_error='[fvm_timestepping]: Could not allocate main variables')
+
+          ALLOCATE(i_edgeinfo(4,i_numedge), &
+                   i_edgenodes(2,i_numedge), &
+                   i_elementedges(GRID_elementedges,i_numelmt), &
+                   i_elementdofs(i_faceunknowns, i_numelmt), &
+                   i_elementnodes(3,i_numelmt), &
+                   i_edgeboundary(i_numedge), &
+                   i_nodepatch(GRID_patchelements,i_numnode), &
+                   i_elmtlev(i_numelmt), &
+                   i_elmtstatus(i_numelmt), stat=i_alct)
+          IF(i_alct /= 0) &
+            CALL grid_error(c_error='[fvm_timestepping]: Could not allocate grid based components')
+
+          ALLOCATE(r_metrics_inv(GRID_dimension,GRID_dimension,i_numelmt), &
+                   r_normals(GRID_dimension, i_numedge), &
+                   r_elmtvolume(i_numelmt), &
+                   r_edgelength(i_numedge), &
+                   r_elmtwidth(i_numelmt), &
+                   r_hmin(i_numnode), &
+                   r_cfllocal(i_numelmt), stat=i_alct)
+          IF(i_alct /= 0) &
+            CALL grid_error(c_error='[fvm_timestepping]: Could not allocate matrix components')
+
+          ALLOCATE(r_coonod(GRID_dimension,i_numnode), &
+                   r_coodof(GRID_dimension, i_numdofs), &
+                   r_flux(i_nprogvars, i_numdofs), stat=i_alct)
+          IF(i_alct /= 0) &
+            CALL grid_error(c_error='[fvm_timestepping]: Could not allocate auxiliary data')
+
+!--- get grid-based info only for initialization or when grid has changed
+          CALL grid_getinfo(p_ghand(i_timeplus), i_femtype=FEM_DG, &
+            l_relative=.TRUE., l_finelevel=.TRUE., i_arraypoint=i_valQ, &
+            r_dofvalues=r_Q, r_dofcoordinates=r_coodof, r_nodecoordinates=r_coonod, i_elementdofs=i_elementdofs, &
+            r_elementwidth=r_elmtwidth, i_edgeelements=i_edgeinfo(3:4,:), i_elementedges=i_elementedges, &
+            i_elementnodes=i_elementnodes, i_edgenodes=i_edgenodes, i_edgeboundary=i_edgeboundary, &
+            i_nodepatch=i_nodepatch, i_elementlevel=i_elmtlev, i_elementstatus=i_elmtstatus)
+          IF (i_nsrcterms > 0) THEN
+            CALL grid_getinfo(p_ghand(i_timeplus), i_femtype=FEM_DG, &
+              l_relative=.TRUE., l_finelevel=.TRUE., i_arraypoint=i_valS, r_dofvalues=r_S)
+
+            CALL source_update(p_param, p_timestepinfo%r_modeltime, i_numelmt, &
+                              i_elementdofs, r_coodof, l_changed, r_Q, r_S)
+            CALL grid_putinfo(p_ghand(i_timeplus), l_finelevel=.TRUE., &
+                              i_arraypoint=i_valQ, r_dofvalues=r_Q)
+            CALL grid_putinfo(p_ghand(i_timeplus), l_finelevel=.TRUE., &
+                              i_arraypoint=i_valS, r_dofvalues=r_S)
+          END IF
+
+!--- get all grid dependent matrix terms
+          CALL compute_edgeinfo(i_numedge, i_elementedges, i_edgeboundary, i_edgeinfo)
+
+          CALL fvm_createmetrics(p_ghand(i_timeplus), r_metrics_inv, r_elmtvolume, &
+                                 r_edgelength, r_hmin, r_normals, i_edgeinfo, &
+                                 i_elementnodes, i_elementedges, r_coonod)
+
+        END IF initialize
+
+!--- compute timestep and CFL-number
+        IF (p_param%num%i_lasttimestep == -1) THEN
+          p_timestepinfo%r_timestep = 1.0_GRID_SR
+
+          CALL compute_cfl(p_ghand(i_timeplus), r_Q, r_S, r_hmin, i_faceunknowns, &
+                           i_elementnodes, i_elementdofs, p_timestepinfo, r_cfllocal)
+          p_timestepinfo%r_timestep = p_param%num%r_cflmax / p_timestepinfo%r_cflnumber
+          r_dt                      = p_timestepinfo%r_timestep
+
+          ! compute timesteps when near plot output interval or end of simulation
+          IF (p_timestepinfo%r_modeltime + 2.0_GRID_SR*p_timestepinfo%r_timestep > r_nextplot) THEN
+            IF (p_timestepinfo%r_modeltime + p_timestepinfo%r_timestep > r_nextplot+GRID_EPS) THEN
+              p_timestepinfo%r_timestep = r_nextplot - p_timestepinfo%r_modeltime
+            ELSE
+              p_timestepinfo%r_timestep = (r_nextplot - p_timestepinfo%r_modeltime) / 2.0_GRID_SR
+            END IF
+          END IF
+
+          p_timestepinfo%r_cflnumber = p_param%num%r_cflmax * p_timestepinfo%r_timestep/r_dt
+          r_cfllocal = r_cfllocal * p_timestepinfo%r_timestep
+        ELSE
+          CALL compute_cfl(p_ghand(i_timeplus), r_Q, r_S, r_hmin, i_faceunknowns, &
+                           i_elementnodes, i_elementdofs, p_timestepinfo, r_cfllocal)
+        END IF
+
+        r_dt = p_timestepinfo%r_timestep
+
+!--- call the time evolution computation
+        CALL stop_watch('start',2,p_time)
+
+        CALL pre_timestepping(r_Q, r_dt, i_numelmt, i_faceunknowns, i_elementdofs)
+
+        CALL timestepping(p_ghand(i_timeplus), r_Q, r_Q_next, r_flux, r_S, &
+                          p_timestepinfo%r_modeltime, r_dt, i_stages, r_coeff, i_numelmt, &
+                          i_numedge, i_faceunknowns, i_degree, r_coonod, r_coodof, &
+                          r_metrics_inv, r_Dxi, r_Deta, r_evander, r_einvvander, r_epsi, r_gpsi, &
+                          r_eMinvpsi, r_eMinvdpsidxi, r_eMinvdpsideta, r_gMinvpsi, &
+                          i_equadpts, i_gquadpts, r_eqwei, r_gqwei, r_elmtvolume, &
+                          r_edgelength, r_normals, i_elementedges, i_elementnodes, &
+                          i_elementdofs, i_edgenodes, i_edgeinfo, i_edgeboundary)
+
+        CALL stop_watch('stop ',2,p_time)
+
+!--- adapt the grid corresponding to an error estimate
+        IF (p_timestepinfo%i_adapit <= i_innermax) THEN
+          CALL stop_watch('start',3,p_time)
+          CALL fvm_adapt(p_ghand(i_timeplus), p_param, l_changed, &
+                         i_faceunknowns, i_numdofs, i_numelmt, i_numnode, i_numedge, &
+                         r_evander, r_elmtwidth, r_metrics_inv, i_elementdofs, i_elementnodes, &
+                         i_nodepatch, i_edgeinfo, i_elmtlev, i_elmtstatus, r_Q_next, r_S)
+          CALL stop_watch('stop ',3,p_time)
+        ELSE
+          l_changed = .FALSE.
+        END IF
+
+!--- deallocate workspace if grid was adapted
+        IF(l_changed) THEN
+          DEALLOCATE(r_Q, r_Q_next, r_S)
+          DEALLOCATE(i_edgenodes, i_elementedges, i_elementdofs, i_elementnodes, &
+                     i_edgeboundary, i_edgeinfo, i_nodepatch, i_elmtlev, i_elmtstatus)
+          DEALLOCATE(r_metrics_inv, r_normals, r_elmtvolume, r_edgelength, r_elmtwidth, r_hmin, r_cfllocal)
+          DEALLOCATE(r_coonod, r_coodof, r_flux)
+        END IF !l_changed
+
+      END DO adap_loop
+
+!--- update values on timestep info
+      p_timestepinfo%i_step      = p_timestepinfo%i_step + 1
+      p_timestepinfo%r_modeltime = p_timestepinfo%r_modeltime + r_dt
+
+!--- update solution and source terms at the end of the time step
+      r_Q      = r_Q_next
+      r_Q_next = 0.0_GRID_SR
+
+      CALL source_update(p_param, p_timestepinfo%r_modeltime, i_numelmt, &
+                         i_elementdofs, r_coodof, l_changed, r_Q, r_S)
+
+!--- scatter components
+      CALL grid_putinfo(p_ghand(i_timeplus), l_finelevel=.TRUE., &
+                        i_arraypoint=i_valQ, r_dofvalues=r_Q)
+      IF (i_nsrcterms > 0) THEN
+        CALL grid_putinfo(p_ghand(i_timeplus), l_finelevel=.TRUE., &
+                          i_arraypoint=i_valS, r_dofvalues=r_S)
+      END IF
+
+!--- plot data every [i_plotoffset]th timestep
+      CALL stop_watch('start',1,p_time)
+      plot_step: IF(((p_param%num%i_lasttimestep > 0) .AND. &
+                     (MOD(p_timestepinfo%i_step, p_param%io%i_plotoffset) == 0)) .OR. &
+                    ((p_param%num%i_lasttimestep == -1) .AND. &
+                     (p_timestepinfo%r_modeltime >= r_nextplot-GRID_EPS))) THEN
+        ALLOCATE(r_sol(i_nprogvars, i_faceunknowns*i_numelmt), stat=i_alct)
+        IF(i_alct /= 0) &
+          CALL grid_error(c_error='[fvm_timestepping]: Could not allocate workspace')
+
+        IF((p_param%io%l_para) .OR. (p_param%io%l_netcdf)) &
+          p_timestepinfo%l_ploted= .TRUE.
+
+!--- compute analytical solution
+        CALL dg_elmt_solution(r_coodof, p_timestepinfo%r_modeltime, i_numelmt, &
+                              i_elementdofs, r_coonod, i_elementnodes, r_sol)
+
+        IF(p_param%io%l_para) THEN
+          CALL plot_para_dg(p_ghand(i_timeplus), p_param, p_timestepinfo%i_step, &
+                            p_timestepinfo%r_modeltime, i_faceunknowns, i_degree, &
+                            i_numelmt, i_numnode, i_elementnodes, i_elementdofs, &
+                            r_coonod, r_coodof, r_Q, r_S, r_sol, p_param%io%l_solplot)
+        END IF
+
+        IF(p_param%io%l_netcdf) THEN
+#ifdef USE_NETCDF
+          CALL plot_netcdf(p_ghand(i_timeplus), p_timestepinfo%i_step, &
+                           p_timestepinfo%r_modeltime, i_numnode, i_numelmt, i_numedge, &
+                           i_elementnodes, i_elementdofs, i_edgenodes, r_coonod, r_coodof, &
+                           r_Q, r_S, r_sol, r_einvvander, p_param%io%i_subtriangpts, &
+                           p_param%io%l_solplot)
+#else
+          CALL grid_error(c_error='[fvm_timestepping]: NetCDF library not installed - cannot write data!')
+#endif
+        END IF
+
+        DEALLOCATE(r_sol)
+
+      IF (p_param%num%i_lasttimestep == -1) &
+        r_nextplot = MIN(r_nextplot + p_param%io%r_plotint, p_param%num%r_finaltime)
+
+      END IF plot_step
+      CALL stop_watch('stop ',1,p_time)
+
+!--- diagnostics, if requested
+      IF(p_param%io%l_diagnostics) THEN
+        diag_step: IF(MOD(p_timestepinfo%i_step, p_param%io%i_diagoffset) == 0) THEN
+          CALL stop_watch('start',4,p_time)
+          CALL diag_diagnostics(p_ghand(i_timeplus), p_param, p_timestepinfo, &
+                                i_elementnodes, i_elementdofs, r_coonod, r_coodof, r_Q, r_S)
+          CALL stop_watch('stop ',4,p_time)
+          p_timestepinfo%l_diaged = .TRUE.
+        END IF diag_step
+      END IF
+
+!--- put a saveset to disc every ... timesteps
+      save_step: IF(MOD(p_timestepinfo%i_step, p_param%io%i_saveoffset) == 0) THEN
+        i_tmp = p_param%num%i_experiment
+        WRITE(c_tmp,*) TRIM(GRID_parameters%program_name), '_save.'
+        WRITE(c_file,'(a28,i4.4)') TRIM(c_tmp), i_tmp
+        c_file = ADJUSTL(c_file)
+        CALL grid_writesaveset(c_file, p_ghand)
+        CALL diag_syncdisk
+        p_timestepinfo%l_saved = .TRUE.
+
+!--- write parameter file for remaining experiment
+        IF (p_param%num%i_lasttimestep == -1) THEN
+          CALL io_putinputfile(p_param, p_timestepinfo%i_step + 1, p_timestepinfo%r_modeltime, &
+                               r_finaltime=p_param%num%r_finaltime)
+        ELSE
+          CALL io_putinputfile(p_param, p_timestepinfo%i_step + 1, p_timestepinfo%r_modeltime, &
+                               i_lasttimestep=p_param%num%i_lasttimestep)
+        END IF
+      END IF save_step
+
+!--- runtime information output
+      CALL stop_watch('stop ',5,p_time)
+      p_timeaux = p_time
+      CALL stop_watch_init(5,(/'plotting        ', 'time evolution  ', 'grid adaption   ', &
+                               'diagnostics     ', 'whole timestep  '/), p_time)
+      CALL stop_watch('start',5,p_time)
+      p_timestepinfo%r_cputime = p_timestepinfo%r_cputime + p_timeaux%p_tim(5)%r_tim
+      CALL io_putruntimeinfo(p_ghand(i_timeplus), p_timestepinfo, p_timeaux)
+
+!--- remove obsolecent grid items
+      CALL grid_timeduplicate(p_ghand(i_timeplus), p_ghand(i_time))
+      CALL grid_timetoggle
+      CALL grid_sweep
+
+    END DO time_loop
+
+!--- deallocate workspace
+    DEALLOCATE(r_Q, r_Q_next, r_S)
+    DEALLOCATE(i_edgenodes, i_elementedges, i_elementdofs, i_elementnodes, &
+               i_edgeboundary, i_edgeinfo, i_nodepatch, i_elmtlev, i_elmtstatus)
+    DEALLOCATE(r_metrics_inv, r_normals, r_elmtvolume, r_edgelength, r_elmtwidth, r_hmin, r_cfllocal)
+    DEALLOCATE(r_coonod, r_coodof, r_flux)
+
+!--- deallocate signature matrices
+    DEALLOCATE(r_gqwei, r_gpsi, i_gpsiidx, r_eqwei, r_epsi, r_edpsidxi, r_edpsideta, &
+               r_Dxi, r_Deta, r_evander, r_einvvander, r_emassinv, &
+               r_eMinvpsi, r_gMinvpsi, r_eMinvdpsidxi, r_eMinvdpsideta, r_gpsitmp, r_coeff)
+
+!--- print total time
+    write(GRID_parameters%ioout,1005)
+    write(GRID_parameters%ioout,1003) p_timestepinfo%r_cputime
+    write(GRID_parameters%ioout,1004)
+    IF(GRID_parameters%iolog > 0) THEN
+      write(GRID_parameters%ioout,1003) p_timestepinfo%r_cputime
+    END IF
+
+!--- terminate diagnostics
+    IF(p_param%io%l_diagnostics) THEN
+      CALL diag_quit(p_ghand(i_timeplus), p_param)
+    END IF
+
+    RETURN
+
+ 1000     FORMAT(1x,'***** ***** ***** ***** ***** ***** ***** ***** ***** *****',/ &
+                 1x,'*****            Runtime Information Output           *****',/ &
+                 1x,'***** ----- ----- ----- ----- ----- ----- ----- ----- *****')
+ 1003     FORMAT(1x,'***** Total time for timesteps ',10x,e12.4,' *****')
+ 1004     FORMAT(1x,'***** ***** ***** ***** ***** ***** ***** ***** ***** *****')
+ 1005     FORMAT(1x,'***** ***** ***** ***** ***** ***** ***** ***** ***** *****',/ &
+                 1x,'*****             Final Information Output            *****',/ &
+                 1x,'***** ----- ----- ----- ----- ----- ----- ----- ----- *****')
+
+  END SUBROUTINE fvm_timestepping
+
+!*******************************************************************************
+END MODULE ADV_dg

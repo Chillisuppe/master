@@ -1,0 +1,624 @@
+!*******************************************************************************
+!
+!> @file MISC_quad.f90
+!> @brief contains module MISC_quad
+!
+!*******************************************************************************
+!
+! VERSION(S):
+!  1. original version                       m. baensch    11/2016
+!
+!*******************************************************************************
+! MODULE DESCRIPTION:
+!> @brief defines a quadrature type which allows for quadrature
+!> calculation over the domain with either function pointer or function
+!> values at the dof coordinates
+!
+MODULE MISC_quad
+
+  USE GRID_api
+  USE DG_utils, ONLY: Vandermonde2D, bary
+  USE MISC_utils, ONLY: compute_inverse
+
+  IMPLICIT NONE
+
+  TYPE quadrature
+    REAL (KIND = GRID_SR)                           :: r_sumunrmwgt           !< unnormalized sum of weights
+    REAL (KIND = GRID_SR), DIMENSION(:),   POINTER  :: r_weights => null()    !< weights for Gauss points
+    REAL (KIND = GRID_SR), DIMENSION(:,:), POINTER  :: r_barycoords => null() !< barycentric coordinates of Gauss points
+    REAL (KIND = GRID_SR), DIMENSION(:,:), POINTER  :: r_evander => null()    !< Vandermonde matrix
+    REAL (KIND = GRID_SR), DIMENSION(:,:), POINTER  :: r_psi => null()        !< basis function values at Gauss points
+    INTEGER (KIND = GRID_SI)                        :: i_ngpts                !< number of Gauss points
+    INTEGER (KIND = GRID_SI)                        :: i_faceunknowns         !< number of DOFs per cell
+
+    CONTAINS
+
+! make functions public so that they can be called for the object itself
+      PROCEDURE :: initialize
+      PROCEDURE :: deinitialize
+      PROCEDURE :: compute_function
+      PROCEDURE :: compute_gridfcn
+      PROCEDURE :: compute_funcgridfcns
+      GENERIC   :: compute          => compute_function, compute_gridfcn, &
+                                       compute_funcgridfcns
+      PROCEDURE :: L2_projection
+      PROCEDURE :: Lperror
+      PROCEDURE :: Linferror
+      PROCEDURE, PRIVATE :: compute_quadtriangle
+  END TYPE quadrature
+
+  PRIVATE
+  PUBLIC  :: quadrature
+
+  CONTAINS
+
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE initialize]:
+!> @brief Initializes the quadrature
+!>
+!> @param[out]    p_quad        quadrature type output (internal argument)
+!> @param[in]     i_exactness   exactness of the element quadrature
+!> @param[in]     FEM_DG        FEM signature
+!
+  SUBROUTINE initialize(p_quad, i_exactness, FEM_DG)
+
+    IMPLICIT NONE
+
+    CLASS (quadrature),       INTENT(OUT)                 :: p_quad
+    INTEGER,                  INTENT(IN)                  :: i_exactness
+    INTEGER (KIND = GRID_SI), INTENT(IN)                  :: FEM_DG
+
+!--- local declarations
+    INTEGER, PARAMETER                                    :: i_ioerr = 0
+    INTEGER (KIND = GRID_SI)                              :: i_iost, i_ioend, i_alct, i_cnt, i_degree, i_iofil
+    CHARACTER (len=80)                                    :: c_filrow
+    CHARACTER (len=20)                                    :: c_filename
+    REAL (KIND = GRID_SR), DIMENSION(:,:), ALLOCATABLE    :: r_tmp
+    REAL (KIND = GRID_SR), DIMENSION(2,3)                 :: r_triangle
+    REAL (KIND = GRID_SR), DIMENSION(:,:), ALLOCATABLE    :: r_einvvander, r_vanderpsi
+
+    WRITE(c_filename,'(A,I2.2,A)') 'gausspoints', i_exactness, '.dat'
+    c_filename = TRIM(c_filename)
+
+!--- check whether any arrays have already been allocated
+    IF (ASSOCIATED(p_quad%r_weights) .OR. &
+        ASSOCIATED(p_quad%r_barycoords) .OR. &
+        ASSOCIATED(p_quad%r_evander) .OR. &
+        ASSOCIATED(p_quad%r_psi)) THEN
+      CALL p_quad%deinitialize
+    END IF
+
+!--- load gauss points
+!--- open file
+    OPEN(NEWUNIT=i_iofil, file=c_filename, status='OLD', action='READ', iostat=i_iost)
+    file_notopen: IF(i_iost /= 0) THEN
+      WRITE(i_ioerr,*) 'ERROR: Filename: ', c_filename
+      IF(GRID_parameters%iolog > 0) &
+        WRITE(GRID_parameters%iolog,*) 'ERROR: Filename: ', c_filename
+      CALL grid_error(c_error='[initialize]: Could not open file for gauss points')
+    ELSE file_notopen
+      IF(GRID_parameters%iolog > 0) THEN
+        WRITE(GRID_parameters%iolog,*) 'INFO: Filename: ', c_filename, ' opened on unit: ', i_iofil
+      END IF
+    END IF file_notopen
+
+!--- read line by line
+    read_loop: DO
+      READ(i_iofil,'(A80)',iostat=i_ioend) c_filrow
+
+!--- if file ended
+      file_end: IF(i_ioend /= 0) THEN
+        CLOSE(i_iofil)
+        IF(GRID_parameters%iolog > 0) &
+          WRITE(GRID_parameters%iolog,*) 'INFO: Closed file on unit: ', i_iofil
+        EXIT
+      ELSE file_end
+
+!--- decide what to DO with line according to first character
+        comment_line: IF(c_filrow(1:1) == '#' .or. c_filrow(1:1) == '!') THEN
+          CYCLE read_loop
+        ELSE IF (TRIM(c_filrow) == 'NUM_GAUSSPOINTS') THEN
+          READ(i_iofil,*) p_quad%i_ngpts
+          ALLOCATE(r_tmp(p_quad%i_ngpts,2), &
+                   p_quad%r_weights(p_quad%i_ngpts), &
+                   p_quad%r_barycoords(3,p_quad%i_ngpts), STAT=i_alct)
+            IF(i_alct /= 0) CALL grid_error(c_error='[initialize]: could not allocate quadrature array')
+        ELSE IF (TRIM(c_filrow) == 'GAUSS_POINTS') THEN
+          DO i_cnt=1, p_quad%i_ngpts
+            READ(i_iofil,*) r_tmp(i_cnt,1:2), p_quad%r_weights(i_cnt)
+          END DO
+        ELSE comment_line
+          CALL grid_error(c_error='[initialize]: Dont know what to do with this parameter file')
+        END IF comment_line
+      END IF file_end
+    END DO read_loop
+
+!--- define reference triangle (right triangle with x/y in [-1,1]
+    r_triangle = RESHAPE([-1.0_GRID_SR, -1.0_GRID_SR, 1.0_GRID_SR, &
+                          -1.0_GRID_SR, -1.0_GRID_SR, 1.0_GRID_SR], [2,3])
+
+!--- normalize weights
+    p_quad%r_sumunrmwgt = SUM(p_quad%r_weights)
+    p_quad%r_weights    = p_quad%r_weights / p_quad%r_sumunrmwgt
+
+!--- calculate barycentric coordinates for gauss points
+    DO i_cnt = 1, p_quad%i_ngpts
+      p_quad%r_barycoords(:,i_cnt) = bary([r_tmp(i_cnt,1),r_tmp(i_cnt,2)], &
+                                          r_triangle)
+    END DO
+
+    i_degree              = GRID_femtypes%p_type(FEM_DG)%sig%i_degree
+    p_quad%i_faceunknowns = GRID_femtypes%p_type(FEM_DG)%sig%i_unknowns
+
+    ALLOCATE(p_quad%r_psi(p_quad%i_ngpts,p_quad%i_faceunknowns), &
+             p_quad%r_evander(p_quad%i_faceunknowns, p_quad%i_faceunknowns), &
+             r_einvvander(p_quad%i_faceunknowns, p_quad%i_faceunknowns), &
+             r_vanderpsi(p_quad%i_ngpts, p_quad%i_faceunknowns))
+    IF(i_alct /= 0) CALL grid_error(c_error='[initialize]: could not allocate quadrature array')
+
+!--- compute Vandermonde matrices and basis function values at Gauss points
+    CALL Vandermonde2D(i_degree, GRID_femtypes%p_type(FEM_DG)%sig%r_edofcoo, p_quad%r_evander)
+    CALL compute_inverse(p_quad%r_evander, r_einvvander)
+
+    CALL Vandermonde2D(i_degree, p_quad%r_barycoords, r_vanderpsi)
+    p_quad%r_psi = MATMUL(r_vanderpsi, r_einvvander)
+
+    DEALLOCATE(r_tmp, r_einvvander, r_vanderpsi)
+
+  END SUBROUTINE initialize
+
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE deinitialize]:
+!> @brief cleans up quadrature object by deallocating arrays etc.
+!>
+!> @param[out]    p_quad        quadrature type output (internal argument)
+!
+  SUBROUTINE deinitialize(p_quad)
+
+    IMPLICIT NONE
+    CLASS (quadrature), INTENT(INOUT) :: p_quad
+
+    INTEGER (KIND = GRID_SI)          :: i_alct
+
+    IF (ASSOCIATED(p_quad%r_weights) .OR. &
+        ASSOCIATED(p_quad%r_barycoords) .OR. &
+        ASSOCIATED(p_quad%r_evander) .OR. &
+        ASSOCIATED(p_quad%r_psi)) THEN
+      DEALLOCATE(p_quad%r_weights, p_quad%r_barycoords, p_quad%r_evander, p_quad%r_psi, STAT=i_alct)
+      NULLIFY(p_quad%r_weights)
+      NULLIFY(p_quad%r_barycoords)
+      NULLIFY(p_quad%r_evander)
+      NULLIFY(p_quad%r_psi)
+    END IF
+
+    IF(GRID_parameters%iolog > 0) WRITE(GRID_parameters%iolog,*) 'INFO: Deallocated quadrature arrays'
+
+  END SUBROUTINE deinitialize
+
+!*******************************************************************************
+! DESCRIPTION of [FUNCTION compute_function]:
+!> @brief computes the quadrature of a given function on a given grid
+!>
+!> @param[inout]  p_quad           quadrature type output (internal argument)
+!> @param[in]     r_coonod         (x,y) coordinates for each grid node
+!> @param[in]     i_elmtnodes      indices for the vertices
+!> @param[in]     p_function       function to be integrated f(x,y) to R
+!>                                 (given by function pointer)
+!> @return                         result of quadrature
+!
+  FUNCTION compute_function(p_quad, r_coonod, i_elmtnodes, p_function) RESULT (r_quadresult)
+
+    IMPLICIT NONE
+
+    CLASS (quadrature),                       INTENT(INOUT) :: p_quad
+    REAL (KIND = GRID_SR), DIMENSION(:,:),    INTENT(IN)    :: r_coonod
+    INTEGER (KIND = GRID_SI), DIMENSION(:,:), INTENT(IN)    :: i_elmtnodes
+    REAL (KIND = GRID_SR)                                   :: r_quadresult
+
+!--- this is an interface block for the function pointer.
+    INTERFACE
+      FUNCTION p_function(x,y)
+        IMPORT                      :: GRID_SR
+        REAL (GRID_SR)              :: p_function
+        REAL (GRID_SR), INTENT(IN)  :: x, y
+      END FUNCTION p_function
+    END INTERFACE
+
+!--- local declarations
+    REAL (KIND = GRID_SR),   DIMENSION(GRID_DIMENSION, p_quad%i_ngpts)  :: r_cooquad
+    REAL (KIND = GRID_SR),   DIMENSION(p_quad%i_ngpts)      :: r_funcvals
+    INTEGER (KIND = GRID_SI)                                :: i_cnt, i_elmt
+
+!--- initialize quadrature
+    r_quadresult = 0.0_GRID_SR
+
+!--- loop over all elements
+    DO i_elmt = 1, SIZE(i_elmtnodes,2)
+
+!--- calculate coordinates of quadrature points on the element
+      r_cooquad = MATMUL(r_coonod(:,i_elmtnodes(:, i_elmt)), p_quad%r_barycoords)
+
+!--- evaluate function at each quadrature point
+      DO i_cnt = 1, p_quad%i_ngpts
+        r_funcvals(i_cnt) = p_function(r_cooquad(1,i_cnt), r_cooquad(2,i_cnt))
+      END DO
+
+!--- compute quadrature
+      r_quadresult = r_quadresult + &
+        p_quad%compute_quadtriangle(r_coonod(:,i_elmtnodes(:,i_elmt)), r_funcvals)
+
+    END DO
+
+  END FUNCTION compute_function
+
+!*******************************************************************************
+! DESCRIPTION of [FUNCTION compute_gridfcn]:
+!> @brief computes the quadrature of a given grid function
+!>
+!> @param[inout]  p_quad           quadrature type output (internal argument)
+!> @param[in]     r_coonod         (x,y) coordinates for each grid node
+!> @param[in]     i_elmtnodes      indices for the vertices
+!> @param[in]     i_elmtdofs       indices for the dofs
+!> @param[in]     r_gridfcn        grid function (given as array)
+!> @return                         result of quadrature
+!
+  FUNCTION compute_gridfcn(p_quad, r_coonod, i_elmtnodes, i_elmtdofs, &
+                           r_gridfcn) RESULT (r_quadresult)
+
+    IMPLICIT NONE
+
+    CLASS (quadrature),                       INTENT(INOUT) :: p_quad
+    REAL (KIND = GRID_SR), DIMENSION(:,:),    INTENT(IN)    :: r_coonod
+    INTEGER (KIND = GRID_SI), DIMENSION(:,:), INTENT(IN)    :: i_elmtnodes
+    INTEGER (KIND = GRID_SI), DIMENSION(:,:), INTENT(IN)    :: i_elmtdofs
+    REAL (KIND = GRID_SR), DIMENSION(:),      INTENT(IN)    :: r_gridfcn
+    REAL (KIND = GRID_SR)                                   :: r_quadresult
+
+!--- local declarations
+    REAL (KIND = GRID_SR), DIMENSION(p_quad%i_ngpts)        :: r_gridfcnquad
+    INTEGER (KIND = GRID_SI)                                :: i_elmt
+
+!--- initialize quadrature
+    r_quadresult = 0.0_GRID_SR
+
+!--- loop over all elements
+    DO i_elmt = 1, SIZE(i_elmtnodes,2)
+
+!--- evaluate grid function at quadrature points
+      r_gridfcnquad = MATMUL(p_quad%r_psi, r_gridfcn(i_elmtdofs(:,i_elmt)))
+
+!--- compute quadrature
+      r_quadresult = r_quadresult + &
+        p_quad%compute_quadtriangle(r_coonod(:,i_elmtnodes(:,i_elmt)), r_gridfcnquad)
+
+    END DO
+
+  END FUNCTION compute_gridfcn
+
+!*******************************************************************************
+! DESCRIPTION of [FUNCTION compute_funcgridfcns]:
+!> @brief computes the quadrature of a function acting on given grid functions
+!>
+!> @param[inout]  p_quad           quadrature type output (internal argument)
+!> @param[in]     r_coonod         (x,y) coordinates for each grid node
+!> @param[in]     i_elmtnodes      indices for the vertices
+!> @param[in]     i_elmtdofs       indices for the dofs
+!> @param[in]     r_arraygridfcn   array of grid functions (given as array)
+!> @param[in]     p_function       function acting on the given grid functions
+!> @param[in]     i_numfcts        number of grid functions in r_arraygridfcn
+!> @return                         result of quadrature
+!
+  FUNCTION compute_funcgridfcns(p_quad, r_coonod, i_elmtnodes, i_elmtdofs, r_arraygridfcn, &
+                                p_function, i_numfcts) RESULT (r_quadresult)
+
+    IMPLICIT NONE
+
+    CLASS (quadrature),                       INTENT(INOUT) :: p_quad
+    REAL (KIND = GRID_SR), DIMENSION(:,:),    INTENT(IN)    :: r_coonod
+    INTEGER (KIND = GRID_SI), DIMENSION(:,:), INTENT(IN)    :: i_elmtnodes
+    INTEGER (KIND = GRID_SI), DIMENSION(:,:), INTENT(IN)    :: i_elmtdofs
+    REAL (KIND = GRID_SR), DIMENSION(:,:),    INTENT(IN)    :: r_arraygridfcn
+    INTEGER (KIND = GRID_SI),                 INTENT(IN)    :: i_numfcts
+    REAL (KIND = GRID_SR)                                   :: r_quadresult
+
+!--- this is an interface block for the function pointer.
+    INTERFACE
+      FUNCTION p_function(x)
+        IMPORT                                    :: GRID_SR
+        REAL (GRID_SR), DIMENSION(:), INTENT(IN)  :: x
+        REAL (GRID_SR)                            :: p_function
+      END FUNCTION p_function
+    END INTERFACE
+
+!--- local declarations
+    REAL (KIND = GRID_SR), DIMENSION(i_numfcts, p_quad%i_ngpts) :: r_gridfcnquad
+    REAL (KIND = GRID_SR), DIMENSION(p_quad%i_ngpts)        :: r_funcvals
+    INTEGER (KIND = GRID_SI)                                :: i_elmt, i_cnt
+
+!--- initialize quadrature
+    r_quadresult = 0.0_GRID_SR
+
+!--- loop over all elements
+    DO i_elmt = 1, SIZE(i_elmtnodes,2)
+
+!--- evaluate grid functions at quadrature points
+      DO i_cnt = 1, i_numfcts
+        r_gridfcnquad(i_cnt,:) = &
+          MATMUL(p_quad%r_psi, r_arraygridfcn(i_cnt, i_elmtdofs(:,i_elmt)))
+      END DO
+
+!--- evaluate function acting on the grid functions at each quadrature point
+      DO i_cnt = 1, p_quad%i_ngpts
+        r_funcvals(i_cnt) = p_function(r_gridfcnquad(:,i_cnt))
+      END DO
+
+!--- compute quadrature
+      r_quadresult = r_quadresult + &
+        p_quad%compute_quadtriangle(r_coonod(:,i_elmtnodes(:,i_elmt)), r_funcvals)
+
+    END DO
+
+  END FUNCTION compute_funcgridfcns
+
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE L2_projection]:
+!> @brief computes the L2 projection of a given function to a discrete
+!>        finite element space using the given quadrature
+!>
+!> @param[inout]  p_quad           quadrature type output (internal argument)
+!> @param[in]     r_coonod         (x,y) coordinates for each grid node
+!> @param[in]     i_elmtnodes      indices for the vertices
+!> @param[in]     i_elmtdofs       indices for the dofs
+!> @param[in]     p_function       function f(x,y) to R (given by function pointer)
+!> @param[out]    r_projection     result of L2 projection
+!
+  SUBROUTINE L2_projection(p_quad, r_coonod, i_elmtnodes, i_elmtdofs, p_function, r_projection)
+
+    IMPLICIT NONE
+
+    CLASS (quadrature),                       INTENT(INOUT) :: p_quad
+    REAL (KIND = GRID_SR), DIMENSION(:,:),    INTENT(IN)    :: r_coonod
+    INTEGER (KIND = GRID_SI), DIMENSION(:,:), INTENT(IN)    :: i_elmtnodes
+    INTEGER (KIND = GRID_SI), DIMENSION(:,:), INTENT(IN)    :: i_elmtdofs
+
+!--- this is an interface block for the function pointer.
+    INTERFACE
+      FUNCTION p_function(x,y)
+        IMPORT                      :: GRID_SR
+        REAL (GRID_SR), INTENT(IN)  :: x, y
+        REAL (GRID_SR)              :: p_function
+      END FUNCTION p_function
+    END INTERFACE
+    REAL (KIND = GRID_SR), DIMENSION(:),      INTENT(OUT)   :: r_projection
+
+!--- local declarations
+    INTEGER (KIND = GRID_SI)                                :: i_elmt, i_dof, i_quad
+    REAL (KIND = GRID_SR)                                   :: r_elmtvolume
+    REAL (KIND = GRID_SR), DIMENSION(p_quad%i_ngpts)        :: r_funcvals
+    REAL (KIND = GRID_SR), DIMENSION(p_quad%i_ngpts)        :: r_gridfcnquad
+    REAL (KIND = GRID_SR), DIMENSION(p_quad%i_faceunknowns) :: r_rhs
+    REAL (KIND = GRID_SR), DIMENSION(p_quad%i_faceunknowns, p_quad%i_faceunknowns) :: r_emassinv
+    REAL (KIND = GRID_SR), DIMENSION(GRID_DIMENSION,p_quad%i_ngpts) :: r_cooquad
+    REAL (KIND = GRID_SR), DIMENSION(p_quad%i_faceunknowns, p_quad%i_faceunknowns) :: r_id
+
+!--- compute inverse mass matrix and setup test functions at Lagrange points
+    r_emassinv = MATMUL(p_quad%r_evander, TRANSPOSE(p_quad%r_evander))
+
+    r_id = 0.0_GRID_SR
+    DO i_dof = 1, p_quad%i_faceunknowns
+      r_id(i_dof, i_dof) = 1.0_GRID_SR
+    END DO
+
+!--- loop over all elements
+    DO i_elmt = 1, SIZE(i_elmtnodes,2)
+
+!--- calculate coordinates of quadrature points on the element
+      r_cooquad = MATMUL(r_coonod(:,i_elmtnodes(:,i_elmt)), p_quad%r_barycoords)
+
+      DO i_dof = 1, p_quad%i_faceunknowns
+
+!--- evaluate grid function at quadrature points
+        r_gridfcnquad = MATMUL(p_quad%r_psi, r_id(:,i_dof))
+
+!--- compute product of grid function and analytic function at quadrature points
+        DO i_quad = 1, p_quad%i_ngpts
+          r_funcvals(i_quad) = r_gridfcnquad(i_quad) * &
+            p_function(r_cooquad(1,i_quad), r_cooquad(2,i_quad))
+        END DO
+
+!--- compute quadrature
+        r_rhs(i_dof) = p_quad%compute_quadtriangle(r_coonod(:,i_elmtnodes(:,i_elmt)), r_funcvals)
+      END DO
+
+!--- calculate element area
+      r_elmtvolume = 0.5_GRID_SR * ABS((r_coonod(1,2) - r_coonod(1,1)) * &
+                                       (r_coonod(2,3) - r_coonod(2,1)) - &
+                                       (r_coonod(1,3) - r_coonod(1,1)) * &
+                                       (r_coonod(2,2) - r_coonod(2,1)))
+
+      r_projection(i_elmtdofs(:,i_elmt)) = MATMUL(r_emassinv, r_rhs) * &
+        p_quad%r_sumunrmwgt / r_elmtvolume
+    END DO
+
+  END SUBROUTINE L2_projection
+
+!*******************************************************************************
+! DESCRIPTION of [FUNCTION Lperror]:
+!> @brief computes Lp error of a grid function, either with respect to zero,
+!>        or an (otional) given function
+!>
+!> @param[inout]  p_quad           quadrature type output (internal argument)
+!> @param[in]     r_coonod         (x,y) coordinates for each grid node
+!> @param[in]     i_elmtnodes      indices for the vertices
+!> @param[in]     i_elmtdofs       indices for the dofs
+!> @param[in]     r_gridfcn        grid function (given as array)
+!> @param[in]     p_function       function to compare grid function with (optional)
+!> @param[in]     r_p              order of Lp error (optional, default r_p=2)
+!> @return                         computed error by using quadrature
+!
+  FUNCTION Lperror(p_quad, r_coonod, i_elmtnodes, i_elmtdofs, r_gridfcn, &
+                   p_function, r_p) RESULT (r_errorresult)
+
+    IMPLICIT NONE
+
+    CLASS (quadrature),                       INTENT(INOUT) :: p_quad
+    REAL (KIND = GRID_SR), DIMENSION(:,:),    INTENT(IN)    :: r_coonod
+    INTEGER (KIND = GRID_SI), DIMENSION(:,:), INTENT(IN)    :: i_elmtnodes
+    INTEGER (KIND = GRID_SI), DIMENSION(:,:), INTENT(IN)    :: i_elmtdofs
+    REAL (KIND = GRID_SR), DIMENSION(:),      INTENT(IN)    :: r_gridfcn
+    REAL (KIND = GRID_SR), OPTIONAL,          INTENT(IN)    :: r_p
+    REAL (KIND = GRID_SR)                                   :: r_errorresult
+
+!--- this is an interface block for the function pointer.
+    INTERFACE
+      FUNCTION p_function(x,y)
+        IMPORT                      :: GRID_SR
+        REAL (GRID_SR)              :: p_function
+        REAL (GRID_SR), INTENT(IN)  :: x, y
+      END FUNCTION p_function
+    END INTERFACE
+    OPTIONAL :: p_function
+
+!--- local declarations
+    REAL (KIND = GRID_SR)                                   :: r_order
+    INTEGER (KIND = GRID_SI)                                :: i_elmt, i_cnt
+    REAL (KIND = GRID_SR), DIMENSION(p_quad%i_ngpts)        :: r_gridfcnquad
+    REAL (KIND = GRID_SR), DIMENSION(p_quad%i_ngpts)        :: r_errorquad
+    REAL (KIND = GRID_SR), DIMENSION(GRID_DIMENSION, p_quad%i_ngpts) :: r_cooquad
+
+!--- determine order of p error
+    IF (PRESENT(r_p)) THEN
+      r_order = r_p
+    ELSE
+      r_order = 2.0_GRID_SR
+    END IF
+
+!--- initialize error
+    r_errorresult = 0.0_GRID_SR
+
+!--- loop over all elements
+    DO i_elmt = 1, SIZE(i_elmtnodes,2)
+
+!--- calculate coordinates of quadrature points on the element
+      r_cooquad = MATMUL(r_coonod(:,i_elmtnodes(:, i_elmt)), p_quad%r_barycoords)
+
+!--- evaluate grid function at quadrature points
+      r_gridfcnquad = MATMUL(p_quad%r_psi, r_gridfcn(i_elmtdofs(:,i_elmt)))
+
+!--- compute error at quadrature points
+      IF (PRESENT(p_function)) THEN
+        DO i_cnt = 1, p_quad%i_ngpts
+          r_errorquad(i_cnt) = &
+            ABS(r_gridfcnquad(i_cnt) - p_function(r_cooquad(1,i_cnt), r_cooquad(2,i_cnt)))**r_order
+        END DO
+      ELSE
+        DO i_cnt = 1, p_quad%i_ngpts
+          r_errorquad(i_cnt) = ABS(r_gridfcnquad(i_cnt))**r_order
+        END DO
+      END IF
+
+!--- compute global integral
+      r_errorresult = r_errorresult + &
+        p_quad%compute_quadtriangle(r_coonod(:,i_elmtnodes(:,i_elmt)), r_errorquad)
+
+    END DO
+
+!--- take pth root to get the error
+    r_errorresult = r_errorresult**(1.0_GRID_SR/r_order)
+
+  END FUNCTION Lperror
+
+!*******************************************************************************
+! DESCRIPTION of [FUNCTION Linferror]:
+!> @brief computes error in sup norm of a grid function, either with respect
+!>        to zero, or an (otional) given function
+!>
+!> @param[inout]  p_quad           quadrature type output (internal argument)
+!> @param[in]     r_coodof         (x,y) coordinates for each dof
+!> @param[in]     i_elmtdofs       indices for the dofs
+!> @param[in]     r_gridfcn        array of function values at nodes
+!> @param[in]     p_function       actual function
+!> @return                         computed error
+!
+  FUNCTION Linferror(p_quad, r_coodof, i_elmtdofs, r_gridfcn, &
+                     p_function) RESULT (r_errorresult)
+
+    IMPLICIT NONE
+
+    CLASS (quadrature),                       INTENT(INOUT) :: p_quad
+    REAL (KIND = GRID_SR), DIMENSION(:,:),    INTENT(IN)    :: r_coodof
+    INTEGER (KIND = GRID_SI), DIMENSION(:,:), INTENT(IN)    :: i_elmtdofs
+    REAL (KIND = GRID_SR), DIMENSION(:),      INTENT(IN)    :: r_gridfcn
+    REAL (KIND = GRID_SR)                                   :: r_errorresult
+
+!--- this is an interface block for the function pointer.
+    INTERFACE
+      FUNCTION p_function(x,y)
+        IMPORT                      :: GRID_SR
+        REAL (GRID_SR)              :: p_function
+        REAL (GRID_SR), INTENT(IN)  :: x, y
+      END FUNCTION p_function
+    END INTERFACE
+    OPTIONAL :: p_function
+
+!--- local declarations
+    INTEGER (KIND = GRID_SI)                                :: i_elmt, i_cnt
+    REAL (KIND = GRID_SR), DIMENSION(p_quad%i_faceunknowns) :: r_intvals
+
+!--- initialize r_errorresult
+    r_errorresult = 0.0_GRID_SR
+
+!--- loop over all elements
+    DO i_elmt = 1, SIZE(i_elmtdofs,2)
+
+      IF (PRESENT(p_function)) THEN
+        DO i_cnt = 1, p_quad%i_faceunknowns
+          r_intvals(i_cnt) = ABS(r_gridfcn(i_elmtdofs(i_cnt,i_elmt)) - &
+                                 p_function(r_coodof(1,i_elmtdofs(i_cnt,i_elmt)), &
+                                            r_coodof(2,i_elmtdofs(i_cnt,i_elmt))))
+        END DO
+      ELSE
+        DO i_cnt = 1, p_quad%i_faceunknowns
+          r_intvals(i_cnt) = ABS(r_gridfcn(i_elmtdofs(i_cnt,i_elmt)))
+        END DO
+      END IF
+
+!--- calculate quadrature
+      r_errorresult = MAX(r_errorresult, MAXVAL(r_intvals))
+    END DO
+
+  END FUNCTION Linferror
+
+!*******************************************************************************
+! DESCRIPTION of [FUNCTION compute_quadtriangle]:
+!> @brief computes quadrature on one triangular element
+!>
+!> @param[inout]  p_quad           quadrature type output (internal argument)
+!> @param[in]     r_coonod         (x,y) coordinates for each node of triangle
+!> @param[in]     r_funcvals       function values at quadrature points
+!> @return                         result of elemental quadrature
+!
+  FUNCTION compute_quadtriangle(p_quad, r_coonod, r_funcvals) RESULT (r_aux)
+
+    IMPLICIT NONE
+
+    CLASS (quadrature),                    INTENT(IN) :: p_quad
+    REAL (KIND = GRID_SR), DIMENSION(2,3), INTENT(IN) :: r_coonod
+    REAL (KIND = GRID_SR), DIMENSION(:),   INTENT(IN) :: r_funcvals
+    REAL (KIND = GRID_SR)                             :: r_aux
+
+!--- local declarations
+    REAL (KIND = GRID_SR)                             :: r_elmtvolume
+
+!--- calculate element area
+    r_elmtvolume = 0.5_GRID_SR * ABS((r_coonod(1,2) - r_coonod(1,1)) * &
+                                     (r_coonod(2,3) - r_coonod(2,1)) - &
+                                     (r_coonod(1,3) - r_coonod(1,1)) * &
+                                     (r_coonod(2,2) - r_coonod(2,1)))
+
+    r_aux = DOT_PRODUCT(r_funcvals, p_quad%r_weights) * r_elmtvolume
+
+  END FUNCTION compute_quadtriangle
+
+!*******************************************************************************
+END MODULE MISC_quad

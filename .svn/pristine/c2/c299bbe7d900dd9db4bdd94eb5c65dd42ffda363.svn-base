@@ -1,0 +1,235 @@
+!*******************************************************************************
+!
+!> @file  DG_equation.F90
+!> @brief contains module DG_equation
+!
+!*******************************************************************************
+!
+! VERSION(s):
+! 1. first version            s.beckers        07/2013
+! 2. include dummies for DWR  s.beckers        06/2014
+!
+!*******************************************************************************
+! MODULE DESCRIPTION:
+!> @brief Here the user has to specify the flux and the source term.
+!>        The divergence of the flux also has to be specified manualy.
+!>        Also for dual, if desired.
+!
+MODULE DG_equation
+
+  USE GRID_api
+  USE FLASH_parameters
+  USE IO_equation, ONLY : p_equationparam
+
+  PRIVATE
+  PUBLIC  i_nprogvars, i_nsrcterms, i_valQ, i_valS, &
+          VAR1D_PHI, VAR1D_PARACHECK, &
+          equation_initialize, divflux, flux, source, velocity, &
+          io_initialize, pre_timestepping, p_iovars
+
+  INTEGER (KIND = GRID_SI), PARAMETER               :: i_nprogvars = 1 !< number of unknowns
+  INTEGER (KIND = GRID_SI), PARAMETER               :: i_nsrcterms = 0 !< number of grid source term variables
+
+  INTEGER (KIND = GRID_SI), DIMENSION(i_nprogvars)  :: i_valQ !< array of index handles for registered unknowns
+  INTEGER (KIND = GRID_SI), DIMENSION(i_nsrcterms)  :: i_valS !< array of index handles for registered source term variables
+
+!--- constants for the DG variables
+  INTEGER (KIND = GRID_SI)                          :: VAR1D_PHI   !< tracer variable
+  INTEGER (KIND = GRID_SI)                          :: VAR1D_PARACHECK !< variable for consistency check in io_paraplot
+
+!--- array for generic IO
+  TYPE (io_vars), DIMENSION(2 * i_nprogvars + i_nsrcterms)  :: p_iovars
+
+  CONTAINS
+
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE equation_initialize]:
+!> @brief initializes grid variables for unknowns and source term variables
+!>
+!> @param[in]       i_femtype   index handle for fem type
+!
+  SUBROUTINE equation_initialize(i_femtype)
+
+    IMPLICIT NONE
+
+    INTEGER (KIND = GRID_SI), INTENT(in)            :: i_femtype
+
+    VAR1D_PHI   = grid_registerfemvar(i_femtype)
+
+    i_valQ = (/ VAR1D_PHI /)
+
+  END SUBROUTINE equation_initialize
+
+!*******************************************************************************
+! DESCRIPTION of [FUNCTION flux]:
+!> @brief Routine for flux computation. Has to be defined by the user.
+!>
+!> @param[in]       r_Q         state vector (fluid depth, momentum in x-, momentum in y-direction)
+!> @param[in]       r_S         source terms
+!> @return                      return value
+!
+  FUNCTION flux(r_Q, r_S) RESULT(r_flux)
+
+    IMPLICIT NONE
+
+    REAL (KIND = GRID_SR), DIMENSION(i_nprogvars), INTENT(in) :: r_Q
+    REAL (KIND = GRID_SR), DIMENSION(i_nsrcterms), INTENT(in), OPTIONAL :: r_S
+    REAL (KIND = GRID_SR), DIMENSION(i_nprogvars,2)           :: r_flux
+
+    REAL (KIND = GRID_SR)                                     :: r_u, r_v
+
+    r_flux(1,1) = r_Q(1)*velocity(1)
+    r_flux(1,2) = r_Q(1)*velocity(2)
+
+  END FUNCTION flux
+
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE source]:
+!> @brief
+!
+!> @param         r_rhs
+!> @param         i_faceunknowns
+!> @param         i_equadpts
+!> @param         r_eqwei
+!> @param         r_eMinvpsi
+!> @param         r_Qelmt       state vector (rho, rho u, rho v, rho theta)
+!> @param         r_epsi
+!> @param         r_ddxq
+!> @param         r_ddyq
+!> @param         r_lapq
+!> @param         r_Qelmt
+!> @param         r_Selmt
+!> @param         r_coo
+!> @param         r_time
+!> @param         r_iswet
+!
+  SUBROUTINE source(r_rhs, i_faceunknowns, i_equadpts, r_eqwei, r_eMinvpsi, r_epsi, &
+                    r_ddxq, r_ddyq, r_lapq, r_Qelmt, r_Selmt, r_coo, r_time, r_iswet)
+
+    IMPLICIT NONE
+
+    REAL (KIND = GRID_SR), DIMENSION(:,:), INTENT(inout)    :: r_rhs
+    INTEGER (KIND = GRID_SI), INTENT(in)                    :: i_faceunknowns, i_equadpts
+    REAL (KIND = GRID_SR), DIMENSION(:), INTENT(in)         :: r_eqwei
+    REAL (KIND = GRID_SR), DIMENSION(:,:), INTENT(in)       :: r_eMinvpsi, &
+                                                               r_epsi, r_ddxq, r_ddyq, r_lapq, &
+                                                               r_Qelmt, r_Selmt, r_coo
+    REAL (KIND = GRID_SR), INTENT(in)                       :: r_time, r_iswet 
+
+    INTEGER (KIND = GRID_SI)                                :: i_quad, i_dof
+    REAL (KIND = GRID_SR), DIMENSION(i_nprogvars)           :: r_source
+
+!--- quadrature loop
+    elmt_quad_loop: DO i_quad=1, i_equadpts
+
+!--- compute the source terms
+      r_source(:) = 0.0_GRID_SR
+
+!--- multiply with r_eqwei*Minv*psi for each dof
+      elmt_dof_loop: DO i_dof=1,i_faceunknowns
+        r_rhs(:,i_dof) = r_rhs(:,i_dof) - r_eqwei(i_quad)*r_eMinvpsi(i_dof,i_quad)*r_source
+      END DO elmt_dof_loop
+
+    END DO elmt_quad_loop
+
+  END SUBROUTINE source
+
+!*******************************************************************************
+! DESCRIPTION of [FUNCTION divflux]:
+!> @brief computes the divergence and source terms of the equation in consistent form
+!
+!> @param[in]       r_Q         state vector (fluid depth, momentum in x-, momentum in y-direction)
+!> @param[in]       r_dQdx
+!> @param[in]       r_dQdy
+!> @return                      return value
+!
+  FUNCTION divflux(r_Q, r_dQdx, r_dQdy) RESULT(r_Div)
+
+    IMPLICIT NONE
+
+    REAL (KIND = GRID_SR), DIMENSION(i_nprogvars), INTENT(in) :: r_Q, r_dQdx, r_dQdy
+    REAL (KIND = GRID_SR), DIMENSION(i_nprogvars)             :: r_Div
+
+!--- local declarations
+    REAL (KIND = GRID_SR)                                     :: r_u, r_v
+    REAL (KIND = GRID_SR), DIMENSION(i_nprogvars,2)           :: r_div_tmp
+
+    r_div_tmp(1,1) = r_dQdx(1)*velocity(1)
+    r_div_tmp(1,2) = r_dQdy(1)*velocity(2)
+
+!--- compute full RHS
+      r_Div(:) = r_div_tmp(:,1) + r_div_tmp(:,2)
+
+  END FUNCTION divflux
+
+!*******************************************************************************
+! DESCRIPTION of [FUNCTION velocity]:
+!> @brief computes the velocity field
+!
+!> @param[in]       i_index         coordinate index of velocity
+!> @return                          velocity component
+!
+  FUNCTION velocity(i_index) RESULT(r_velocity)
+    IMPLICIT NONE
+
+    INTEGER (KIND = GRID_SI), INTENT(IN)      :: i_index
+
+    REAL (KIND = GRID_SR)                     :: r_velocity
+
+    r_velocity = p_equationparam%r_velo(i_index)
+
+  END FUNCTION velocity
+
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE pre_timestepping]:
+!> @brief pre-timestepping routine for, e.g., split implicit discretization
+!>        of friction
+!
+!> @param         r_Q
+!> @param         r_dt
+!> @param         i_numelmt
+!> @param         i_faceunknowns
+!> @param         i_elementdofs
+!
+  SUBROUTINE pre_timestepping(r_Q, r_dt, i_numelmt, i_faceunknowns, i_elementdofs)
+
+    IMPLICIT NONE
+
+    REAL (KIND = GRID_SR), DIMENSION(:,:)                   :: r_Q
+    REAL (KIND = GRID_SR)                                   :: r_dt
+    INTEGER (KIND = GRID_SI)                                :: i_numelmt, i_faceunknowns
+    INTEGER (KIND = GRID_SI), DIMENSION(:,:)                :: i_elementdofs
+
+  END SUBROUTINE pre_timestepping
+
+!*******************************************************************************
+! Only routines for IO follow
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE io_initialize]:
+!> @brief initializes general IO variable names and units for IO file output
+!>
+!
+  SUBROUTINE io_initialize()
+
+    IMPLICIT NONE
+
+    VAR1D_PARACHECK = VAR1D_PHI
+
+!--- tracer
+    p_iovars(1)%r_factor        = 1.0_GRID_SR
+    p_iovars(1)%c_varname       = 'tracer'
+    p_iovars(1)%c_long_name     = 'tracer concentration'
+    p_iovars(1)%c_standard_name = 'tracer_concentration' ! not CF conform!
+    p_iovars(1)%c_units         = 'kg/m^3'
+
+!--- exact tracer
+    p_iovars(2)%r_factor        = 1.0_GRID_SR
+    p_iovars(2)%c_varname       = 'exact_tracer'
+    p_iovars(2)%c_long_name     = 'exact tracer'
+    p_iovars(2)%c_standard_name = 'exact_tracer' ! not CF conform!
+    p_iovars(2)%c_units         = 'kg/m^3'
+
+  END SUBROUTINE io_initialize
+
+!*******************************************************************************
+END MODULE DG_equation

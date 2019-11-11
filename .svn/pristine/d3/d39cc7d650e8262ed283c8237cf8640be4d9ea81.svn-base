@@ -1,0 +1,133 @@
+!*******************************************************************************
+!
+!> @file  DG_boundary_atmatrest.F90
+!> @brief contains module DG_boundary
+!
+!*******************************************************************************
+! DESCRIPTION:
+!> @brief definition of boundary conditions on one edge
+!
+MODULE DG_boundary
+
+  USE GRID_api
+  USE FLASH_parameters
+  USE DG_equation, ONLY : velocity, PrimitiveToProgvars
+  USE IO_equation, ONLY : p_equationparam
+
+  PRIVATE
+  PUBLIC :: DG_bou
+
+  CONTAINS
+
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE DG_bou]:
+!> @brief
+!
+!> @param           r_time            current model time
+!> @param[in]       i_elmt_l
+!> @param[in]       i_elmt_r
+!> @param[in]       i_faceunknowns    number of DOFs per element
+!> @param[in]       i_elmtdofs_r
+!> @param[in]       i_edgebou         boundary flag of edge
+!> @param[in]       r_normal
+!> @param[in]       r_Q
+!> @param[in]       r_S
+!> @param[in]       r_element_vol     volume of each element; DIMENSION(i_numelmt)
+!> @param[in]       r_Q_l             state vector at Lagrange points of left element; DIMENSION(variables,i_gquadpts)
+!> @param[in]       r_S_l
+!> @param[out]      r_Q_r             state vector at Lagrange points of right element; DIMENSION(variables,i_gquadpts)
+!> @param[out]      r_S_r
+!> @param[out]      r_elmt_vol_r
+!
+  SUBROUTINE DG_bou(r_time, i_elmt_l, i_elmt_r, i_faceunknowns, i_elmtdofs_r, i_edgebou, &
+                    r_coo_r, r_normal, r_Q, r_S, r_element_vol, &
+                    r_Q_l, r_S_l, r_Q_r, r_S_r, r_elmt_vol_r)
+
+    IMPLICIT NONE
+
+    REAL (KIND = GRID_SR), INTENT(IN)                   :: r_time
+    INTEGER (KIND = GRID_SI), INTENT(IN)                :: i_elmt_l, i_elmt_r, &
+      i_faceunknowns, i_edgebou
+    INTEGER (KIND = GRID_SI), DIMENSION(:), INTENT(IN)  :: i_elmtdofs_r
+    REAL (KIND = GRID_SR), INTENT(OUT)                  :: r_elmt_vol_r
+    REAL (KIND = GRID_SR), DIMENSION(:), INTENT(IN)     :: r_element_vol, &
+                                                           r_normal
+    REAL (KIND = GRID_SR), DIMENSION(:,:), INTENT(IN)   :: r_coo_r, r_Q, r_Q_l, r_S_l, r_S
+    REAL (KIND = GRID_SR), DIMENSION(:,:), INTENT(OUT)  :: r_Q_r, r_S_r
+
+    INTEGER (KIND = GRID_SI)                            :: i_gbou, i_face, i_alct
+    REAL (KIND = GRID_SR)                               :: r_u_l, r_v_l, r_uv_norm, &
+      r_uv_tang, r_theta, r_rhoref, r_gammaaux, r_pressure, r_rho
+
+!--- adjustment for periodic boundary conditions, set as inner boundary (=0)
+    i_gbou = MIN(i_edgebou, 0)
+
+    SELECT CASE (i_gbou)
+    CASE(0) ! inner/periodic boundary conditions
+      r_Q_r = r_Q(:,i_elmtdofs_r)
+      r_S_r = r_S(:,i_elmtdofs_r)
+
+    CASE(-1) ! Dirichlet boundary
+      r_theta = 300.0_GRID_SR
+      r_rhoref   = p_equationparam%r_pref/(p_equationparam%r_rgas*r_theta)
+      r_gammaaux = (p_equationparam%r_gamma - 1.0_GRID_SR) / p_equationparam%r_gamma
+
+      DO i_face = 1, i_faceunknowns
+        r_pressure = p_equationparam%r_pref * (1.0_GRID_SR - r_coo_r(2,i_face) * r_gammaaux * GRID_GRAV * &
+                     r_rhoref / p_equationparam%r_pref)**(1.0_GRID_SR/r_gammaaux)
+        r_rho      = r_rhoref * (r_pressure / p_equationparam%r_pref)**(1.0_GRID_SR/p_equationparam%r_gamma)
+
+        r_u_l = velocity(r_Q_l(1,i_face), r_Q_l(2,i_face))
+        r_v_l = velocity(r_Q_l(1,i_face), r_Q_l(3,i_face))
+
+        CALL PrimitiveToProgvars([r_rho, [0.0_GRID_SR, 0.0_GRID_SR], r_pressure], r_Q_r(:,i_face))
+        r_S_r = 0.0_GRID_SR
+      END DO
+
+    CASE(-3) ! reflecting boundary conditions
+      r_Q_r(1,:) = r_Q_l(1,:)
+      r_Q_r(4,:) = r_Q_l(4,:)
+      r_S_r      = r_S_l
+
+      DO i_face = 1, i_faceunknowns
+        r_u_l = velocity(r_Q_l(1,i_face), r_Q_l(2,i_face))
+        r_v_l = velocity(r_Q_l(1,i_face), r_Q_l(3,i_face))
+
+        r_uv_norm =  r_normal(1)*r_u_l + r_normal(2)*r_v_l ! this is (\vec u,\vec n)
+        r_uv_tang = -r_normal(2)*r_u_l + r_normal(1)*r_v_l ! this is (\vec u,\vec t)
+
+        r_Q_r(2,i_face) = r_Q_r(1,i_face)*(-r_uv_tang*r_normal(2) - r_uv_norm*r_normal(1))
+        r_Q_r(3,i_face) = r_Q_r(1,i_face)*( r_uv_tang*r_normal(1) - r_uv_norm*r_normal(2))
+      END DO
+
+    CASE(-4) ! extrapolation boundary conditions
+      r_Q_r = r_Q_l
+      r_S_r = r_S_l
+
+    CASE(-5) ! no-flux boundary conditions
+      r_Q_r(1,:) = r_Q_l(1,:)
+      r_Q_r(4,:) = r_Q_l(4,:)
+      r_S_r      = r_S_l
+
+      DO i_face = 1, i_faceunknowns
+        r_u_l = velocity(r_Q_l(1,i_face), r_Q_l(2,i_face))
+        r_v_l = velocity(r_Q_l(1,i_face), r_Q_l(3,i_face))
+
+        r_uv_norm =  r_normal(1)*r_u_l + r_normal(2)*r_v_l ! this is (\vec u,\vec n)
+        r_uv_tang = -r_normal(2)*r_u_l + r_normal(1)*r_v_l ! this is (\vec u,\vec t)
+
+        r_Q_r(2,i_face) = -r_Q_r(1,i_face)*r_uv_tang*r_normal(2)
+        r_Q_r(3,i_face) =  r_Q_r(1,i_face)*r_uv_tang*r_normal(1)
+      END DO
+
+    CASE DEFAULT
+      CALL grid_error(c_error='[DG_bou]: boundary condition not supported!')
+
+    END SELECT
+
+    r_elmt_vol_r = r_element_vol(i_elmt_r)
+
+  END SUBROUTINE DG_bou
+
+!*******************************************************************************
+END MODULE DG_boundary

@@ -1,0 +1,269 @@
+!*******************************************************************************
+!
+!> @file  DG_initial_atmosphereatrest.f90
+!> @brief contains module DG_initial
+!
+!*******************************************************************************
+! MODULE DESCRIPTION:
+!> @brief initialize fields with a stationary atmosphere, see Benacchio (2014)
+!
+MODULE DG_initial
+
+  USE GRID_api
+  USE FLASH_parameters
+  USE DG_equation, ONLY : i_nprogvars, i_valQ, PrimitiveToProgvars
+  USE IO_equation, ONLY : p_equationparam
+
+  PRIVATE
+  PUBLIC  i_ntstintparam, i_ntstrealparam, i_ntstcharparam, i_ntstlogparam, &
+          initial_setparam, p_testparam, initialize_testcase, initialvalues_iter, &
+          source_update, dg_elmt_solution
+
+  TYPE (test_param)                                   :: p_testparam
+  INTEGER, PARAMETER                                  :: i_ntstintparam  = 0
+  INTEGER, PARAMETER                                  :: i_ntstrealparam = 2
+  INTEGER, PARAMETER                                  :: i_ntstcharparam = 0
+  INTEGER, PARAMETER                                  :: i_ntstlogparam  = 0
+
+  CONTAINS
+
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE initial_setparam]:
+!> @brief initializes test case specific parameter list
+!
+  SUBROUTINE initial_setparam
+
+    IMPLICIT NONE
+
+    ! pressure perturbation eta
+    p_testparam%treal(1)%c_keyword = 'PT_BACKGROUND'
+    p_testparam%treal(1)%i_size    = 1
+
+    ! initial velocity (u0, v0)
+    p_testparam%treal(2)%c_keyword = 'INITIAL_VELO'
+    p_testparam%treal(2)%i_size    = 2
+
+
+  END SUBROUTINE initial_setparam
+
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE initialize_testcase]:
+!> @brief initializes testcase (e.g. setup constants, auxiliary fields)
+!>
+!> @param[in]       p_ghand       grid handling data structure
+!> @param[in,out]   p_param       control structure for global parameters
+!> @param[in]       r_time        current model time
+!>
+!> @note This is just a dummy in this case.
+!
+  SUBROUTINE initialize_testcase(p_ghand, p_param, r_time)
+
+    IMPLICIT NONE
+
+    TYPE (grid_handle), INTENT(in)                        :: p_ghand
+    TYPE (control_struct), INTENT(inout)                  :: p_param
+    REAL (KIND = GRID_SR), INTENT(in)                     :: r_time
+
+  END SUBROUTINE initialize_testcase
+
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE initialvalues_iter]:
+!> @brief initializes a grid with values
+!>
+!> @param[in]       p_ghand       grid handling data structure
+!> @param[in,out]   p_param       control structure for global parameters
+!> @param[in]       r_time        current model time
+!>
+!> @note This routine initializes the flow field.
+!
+  SUBROUTINE initialvalues_iter(p_ghand, p_param, r_time)
+
+    IMPLICIT NONE
+
+    TYPE (grid_handle), INTENT(in)                        :: p_ghand
+    TYPE (control_struct), INTENT(inout)                  :: p_param
+    REAL (KIND = GRID_SR), INTENT(in)                     :: r_time
+
+!--- local declarations
+    INTEGER (KIND = GRID_SI)                              :: i_faceunknowns, i_numelmt, &
+      i_num, i_alct
+    INTEGER (KIND = GRID_SI), DIMENSION(:,:), ALLOCATABLE :: i_elmtdofs
+    REAL (KIND = GRID_SR), DIMENSION(:,:), ALLOCATABLE    :: r_coodof
+
+!--- initialize some constants
+    i_faceunknowns = GRID_femtypes%p_type(FEM_DG)%sig%i_unknowns
+    i_numelmt      = p_ghand%i_enumfine
+    i_num          = i_numelmt*i_faceunknowns
+
+!--- allocate workspace
+    ALLOCATE(i_elmtdofs(i_faceunknowns, i_numelmt), &
+             r_coodof(GRID_dimension, i_num), STAT=i_alct)
+    IF(i_alct /= 0) CALL grid_error(c_error='[initialvalues_iter]: could not allocate grid field')
+
+!--- get grid information
+    CALL grid_getinfo(p_ghand, i_femtype=FEM_DG, l_relative=.TRUE., &
+                      l_finelevel=.TRUE., i_elementdofs=i_elmtdofs, r_dofcoordinates=r_coodof)
+
+!--- initialize fields
+    CALL initial_atmosphere(p_ghand, r_coodof, i_num, i_elmtdofs, i_faceunknowns, i_numelmt)
+
+!--- deallocate workspace
+    DEALLOCATE(i_elmtdofs, r_coodof)
+
+  END SUBROUTINE initialvalues_iter
+
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE source_update]:
+!> @brief updates the source terms
+!>
+!> @param[in]       p_param       control structure for global parameters
+!> @param[in]       r_time        model time at which source term is evaluated
+!> @param[in]       i_numelmt     number of elements
+!> @param[in]       i_elmtdofs
+!> @param           r_coodof      coordinates of DOFs
+!
+  SUBROUTINE source_update(p_param, r_time, i_numelmt, i_elmtdofs, r_coodof, &
+                           l_gridchanged, r_Q, r_S)
+
+    IMPLICIT NONE
+
+    TYPE (control_struct),                    INTENT(in)    :: p_param
+    REAL (KIND = GRID_SR),                    INTENT(in)    :: r_time
+    INTEGER (KIND = GRID_SI),                 INTENT(in)    :: i_numelmt
+    INTEGER (KIND = GRID_SI), DIMENSION(:,:), INTENT(in)    :: i_elmtdofs
+    REAL (KIND = GRID_SR), DIMENSION(:,:),    INTENT(in)    :: r_coodof
+    LOGICAL,                                  INTENT(in)    :: l_gridchanged
+    REAL (KIND = GRID_SR), DIMENSION(:,:),    INTENT(inout) :: r_Q, r_S
+
+  END SUBROUTINE source_update
+
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE dg_elmt_solution]:
+!> @brief computes the exact solution approximated in the DG space to compare
+!>        with in diagnostics
+!>
+!> @param[in]       r_coodof        coordinates where solution should be computed
+!> @param[in]       r_time          model time
+!> @param[in]       i_numelmt       number of elements
+!> @param[in]       i_elmtdofs      DOFs of element
+!> @param[in]       r_coonod        coordinates of element nodes
+!> @param[in]       i_elmtnodes     nodes of element
+!> @param           r_sol           computed exact solution
+!
+  SUBROUTINE dg_elmt_solution(r_coodof, r_time, i_numelmt, &
+                              i_elmtdofs, r_coonod, i_elmtnodes, r_sol)
+
+    IMPLICIT NONE
+
+    REAL (KIND = GRID_SR),    DIMENSION(:,:), INTENT(IN)        :: r_coodof, r_coonod
+    REAL (KIND = GRID_SR),                    INTENT(IN)        :: r_time
+    INTEGER (KIND = GRID_SI),                 INTENT(IN)        :: i_numelmt
+    INTEGER (KIND = GRID_SI), DIMENSION(:,:), INTENT(IN)        :: i_elmtdofs, i_elmtnodes
+    REAL (KIND = GRID_SR),    DIMENSION(:,:), INTENT(INOUT)     :: r_sol
+
+    r_sol = 0.0_GRID_SR
+
+  END SUBROUTINE dg_elmt_solution
+
+!*******************************************************************************
+! Only internal subroutines follow
+!*******************************************************************************
+! DESCRIPTION of [SUBROUTINE initial_atmosphere]:
+!> @brief calculates the atmosphere as in Benacchio (2014)
+!>
+!> @param[in]       r_coodof            coordinates of DOFs
+!> @param[in]       i_numdof            number of DOFs
+!> @param[in]       p_ghand             control structure
+!>
+!> @note this initial case is taken from Benacchio (2014; dissertation)
+
+  SUBROUTINE initial_atmosphere(p_ghand, r_coodof, i_numdof, i_elmtdofs, i_faceunknowns, i_numelmt)
+
+    IMPLICIT NONE
+
+    TYPE (grid_handle),                       INTENT(IN)  :: p_ghand
+    REAL (KIND = GRID_SR), DIMENSION(:,:),    INTENT(IN)  :: r_coodof
+    INTEGER (KIND = GRID_SI),                 INTENT(IN)  :: i_numdof
+    INTEGER (KIND = GRID_SI),                 INTENT(IN)  :: i_faceunknowns
+    INTEGER (KIND = GRID_SI),                 INTENT(IN)  :: i_numelmt
+    INTEGER (KIND = GRID_SI), DIMENSION(:,:), INTENT(IN)  :: i_elmtdofs
+
+    REAL (KIND = GRID_SR)                              :: r_rho, r_theta, &
+    r_gammaaux, r_pressure, r_rhoref, r_N
+    REAL (KIND = GRID_SR), DIMENSION(2)                :: r_velo0
+    REAL (KIND = GRID_SR), DIMENSION(:,:), ALLOCATABLE :: r_vars
+    REAL (KIND = GRID_SR), DIMENSION(i_numelmt)        :: r_coo_mean, r_rho_mean, r_nrg_mean
+    INTEGER (KIND = GRID_SI)                           :: i_dof, i_alct, i_elmt, i_case
+
+!--- allocate DG variables
+    ALLOCATE(r_vars(i_nprogvars,i_numdof), STAT=i_alct)
+    IF(i_alct /= 0) &
+    CALL grid_error(c_error='[initial_atmosphere]: Could not allocate grid field')
+
+    r_vars  = 0.0_GRID_SR
+
+!--- initialize several constants
+    r_gammaaux = (p_equationparam%r_gamma - 1.0_GRID_SR) / p_equationparam%r_gamma ! auxiliary variable
+    r_theta    = p_testparam%treal(1)%p_value(1)                       ! background potential temperature
+    r_velo0    = p_testparam%treal(2)%p_value                          ! initial velocity
+    r_rhoref   = p_equationparam%r_pref/(p_equationparam%r_rgas*r_theta)
+    r_N        = 0.01_GRID_SR                                          ! buoyancy freq.
+
+!--- case switch; 1 = neutrally stratified atmosphere, 2 = stably stratified atmosphere
+    i_case = 1
+
+    SELECT CASE (i_case)
+!--- CASE 1: neutrally stratified atmosphere
+      CASE(1)
+        DO i_dof = 1, i_numdof
+          r_pressure = p_equationparam%r_pref * (1.0_GRID_SR - r_coodof(2,i_dof) * r_gammaaux * GRID_GRAV * &
+                       r_rhoref / p_equationparam%r_pref)**(1.0_GRID_SR/r_gammaaux)
+          r_rho      = r_rhoref * (r_pressure / p_equationparam%r_pref)**(1.0_GRID_SR/p_equationparam%r_gamma)
+
+          CALL PrimitiveToProgvars([r_rho, r_velo0, r_pressure], r_vars(:,i_dof))
+        END DO !i_dof
+
+!--- CASE 2: stably stratified atmosphere
+      CASE(2)
+        DO i_dof = 1, i_numdof
+          r_pressure = p_equationparam%r_pref * (1.0_GRID_SR - GRID_GRAV/r_N**2 * r_gammaaux * GRID_GRAV * &
+                       r_rhoref / p_equationparam%r_pref * (1.0_GRID_SR - EXP(-r_N**2 * &
+                       r_coodof(2,i_dof)/GRID_GRAV)))**(1.0_GRID_SR/r_gammaaux)
+          r_rho      = r_rhoref * (r_pressure/p_equationparam%r_pref)**(1.0_GRID_SR/p_equationparam%r_gamma) * &
+                       EXP(-r_N**2 * r_coodof(2,i_dof)/GRID_GRAV)
+
+          CALL PrimitiveToProgvars([r_rho, r_velo0, r_pressure], r_vars(:,i_dof))
+        END DO !i_dof
+      CASE DEFAULT
+        CALL grid_error(c_error='[initial_atmosphere]: Incorrect case selected')
+      END SELECT
+
+!--- r_vars are the conserved variables with
+!  r_vars(1,i_dof) = r_rho           being rho
+!  r_vars(2,i_dof) = r_rho*r_velo(1) being rho * u
+!  r_vars(3,i_dof) = r_rho*r_velo(2) being rho * v
+!  r_vars(4,i_dof) = r_rho*r_theta   being rho * theta
+
+! !--- update energy variable to be hydrostatic
+!     DO i_elmt = 1, i_numelmt
+! !--- calculate mean values
+!       r_rho_mean(i_elmt) = SUM(r_vars(1,i_elmtdofs(:,i_elmt)))/i_faceunknowns
+!       r_nrg_mean(i_elmt) = SUM(r_vars(4,i_elmtdofs(:,i_elmt)))/i_faceunknowns
+!       r_coo_mean(i_elmt) = SUM(r_coodof(2,i_elmtdofs(:,i_elmt)))/i_faceunknowns
+!     END DO
+!     DO i_elmt = 1,i_numelmt
+!       r_vars(4,i_elmtdofs(:,i_elmt)) = r_nrg_mean(i_elmt) - GRID_GRAV * &
+!                r_rho_mean(i_elmt) * (r_coodof(2,i_elmtdofs(:,i_elmt)) - &
+!                r_coo_mean(i_elmt))/(p_equationparam%r_gamma-1.0_GRID_SR)
+!     END DO
+
+!--- write variables to grid
+    CALL grid_putinfo(p_ghand, l_finelevel=.TRUE., i_arraypoint=i_valQ, r_dofvalues=r_vars)
+
+    DEALLOCATE(r_vars)
+
+  END SUBROUTINE initial_atmosphere
+
+
+!*******************************************************************************
+END MODULE DG_initial

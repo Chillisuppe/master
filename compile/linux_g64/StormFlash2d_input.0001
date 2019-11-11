@@ -1,0 +1,69 @@
+# --- --- --- --- --- --- --- --- --- --- --- --- ---
+# Parameter file StormFlash2d_input.0001         
+# created automatically by program StormFlash2d   
+# --- --- --- --- --- --- --- --- --- --- --- --- ---
+EXPERIMENT_NUMBER
+       1
+FINE_GRID_LEVEL
+       4
+COARSE_GRID_LEVEL
+       4
+TOLERANCE_OF_REFINEMENT
+  0.9000E+00
+TOLERANCE_OF_COARSENING
+  0.1000E+00
+WATERMARK_OF_REFINEMENT
+  0.1000E-01
+WATERMARK_OF_COARSENING
+  0.1000E-01
+BEGINNING_TIMESTEP
+     501
+TIMESTEPPING_START_TIME
+  0.5000E+01
+TIMESTEP_LENGTH
+  0.1000E-01
+FINISHING_TIMESTEP
+     720
+STEPS_BTW_PLOTS
+      20
+ADAPT_REGION
+       0
+TIMESTEPPING
+rk22                            
+MAX_CFL_NUMBER
+ -0.1000E+01
+NETCDF_FILE_PLOTTING
+       1
+VTU_FILE_PLOTTING
+       0
+ANASOL_PLOTTING
+       1
+SUBTRIANG_PTS
+       2
+STEPS_BTW_SAVES
+     500
+SAVE_FINISH_CONFIGURATION
+       0
+DIAGNOSTICS
+       1
+STEPS_BTW_DIAG
+      10
+TRIANG_FILE_NAME
+triang_basin_10_x_2.dat         
+NUM_SIGNATURE_FILES
+       1
+SIGNATURE_FILE_NAMES
+dg_linear.ftf                                   
+VISCOSITY
+  0.0000E+00
+BOTTOM_FRIC
+  0.0000E+00
+WIND_FRIC
+  0.0000E+00
+FLUID_DENSITY
+  0.1000E+04
+BATHY_PARAM_DEPTH
+ -0.3000E+01
+WETDRY_TOL
+  0.1000E-07
+# --- ---  End of parameter file  --- --- --- --- ---

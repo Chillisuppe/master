@@ -1,0 +1,458 @@
+#----------------------------------------------------------------#
+# OBJECTS                                                        #
+#----------------------------------------------------------------#
+MAINOBJ = \
+FLASH_parameters.o \
+MISC_utils.o \
+MISC_timing.o \
+MISC_system.o \
+MISC_quad.o \
+MISC_bathy.o \
+MISC_diag.o \
+DG_storm_drag.o \
+DG_storm_holland.o \
+IO_utils.o \
+IO_equation.o \
+DG_utils.o \
+DG_initial.o \
+DG_limiter.o \
+DG_limiter_utils.o \
+DG_errorestimate.o \
+DG_boundary.o \
+DG_equation.o \
+DG_riemann_solver.o \
+DG_flux.o \
+DG_time_utils.o \
+DG_timestepping.o \
+DG_cfl.o \
+IO_paraplot_dg.o \
+ADV_dg.o \
+TAM_main.o
+
+ifeq ($(strip $(USE_NETCDF)), yes)
+  MAINOBJ += \
+  IO_netcdfplot.o
+endif
+
+#----------------------------------------------------------------#
+# COMPILE STEP                                                   #
+#----------------------------------------------------------------#
+
+.SUFFIXES: .F90 .f90 $(SUFFIXES)
+
+%.o: %.F90
+	@echo "make: Building object module from "$<
+	$(F90) $(FFLAGS) $(INCS) -c $<
+
+%.o: %.f90
+	@echo "make: Building object module from "$<
+	$(F90) $(FFLAGS) $(INCS) -c $<
+
+%.o: %.c
+	@echo "make: Building object module from "$<
+	$(CC) $(CFLAGS) $(INCS) -D$(MACHINE) -c $<
+
+clearsrc:
+	@rm -f *.f90 *.h *.F90
+
+clearex:
+	@rm -f $(MAKETHING) StormFlash2d* fort.*
+
+cleardat:
+	@rm -f *.dat *.ftf
+
+clean:
+	@rm -f *.o *.$(MODEND) core
+
+tidy: clean clearex cleardat clearsrc
+	@rm -f TEST_*
+
+testcompile: tidy maincopy
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_weak.F90 DG_flux.F90
+	for i in `find . -name "*.[fF]90"`; do make $${i%.[fF]90}.o; done
+	for i in `find . -name "*.[fF]90"`; do make $${i%.[fF]90}.o; done
+	# some special fixes to satisfy dependencies...
+	@make -B DG_equation.o
+	@make DG_error_hurricane.o
+	@make -B MISC_eqsource_coards.o
+	@make TEST_eqsource_readcoards.o
+	@make TEST_eqsource_writecoards.o
+	@make -B DG_initial_conicalisland-bc.o
+	@make DG_boundary_conicalisland.o
+	@make -B DG_initial_okushiri.o
+	@make DG_boundary_okushiri.o
+	@make DG_flux_strong.o
+	@make DG_flux_strong_SWE.o
+	@make -B TAM_main.o
+	@make -B MISC_bathy_ncfile.o
+	@make ./DG_initial_northsea.o
+	@echo
+	@echo "RESULT OF TEST COMPILATION:"
+	@for i in `find . -name "*.[fF]90"`; do if [ ! -f $${i%.[fF]90}.o ]; then echo $$i did not compile!; fi; done
+	@echo "All (other) modules compiled!"
+
+
+#----------------------------------------------------------------#
+# THIS CREATES PREDEFINED OPTIONS                                #
+#----------------------------------------------------------------#
+
+maincopy:
+	@cp $(SRCDIR)/*.f90 .
+	@cp $(SRCDIR)/*.F90 .
+	@cp $(SYSDIR)/*.f90 .
+	@cp $(TIMDIR)/*.f90 .
+# Note: DO NOT CHANGE THE FOLLOWING LINES!
+# These copy statements are supposed to be the default for
+# several targets. If you need other modules, do the copies
+# in the specific target.
+	@cp IO_netcdfplot_dg_remesh.f90 IO_netcdfplot.f90
+	@cp DG_storm_drag_weisberg.f90 DG_storm_drag.f90
+
+#----------------------------------------------------------------#
+# THIS COMPILES THE MAIN PROGRAM                                 #
+#----------------------------------------------------------------#
+
+executable: $(MAINOBJ)
+	@echo "make: Linking object modules and libraries"
+	$(LOADER) $(LDFLAGS) -o $(MAKETHING) $(MAINOBJ) $(LIBS)
+
+$(MAKETHING): maincopy
+	$(MAKE) executable
+
+all: maincopy
+	$(MAKE) executable
+	$(MAKE) clearsrc
+	$(MAKE) clean
+
+#----------------------------------------------------------------#
+# THIS COMPILES THE MAIN PROGRAM WITH DG NUMERICAL CORE          #
+#----------------------------------------------------------------#
+
+#----------------------------------------------------------------#
+# test cases for shallow water equations                         #
+#----------------------------------------------------------------#
+
+beach: maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp DG_limiter_KuSV.F90 DG_limiter.F90
+	@cp MISC_bathy_etopo.f90 MISC_bathy.f90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+# 	@cp DG_error_abs.f90 DG_errorestimate.f90
+	@cp DG_flux_weak_SWE.F90 DG_flux.F90
+	@cp DG_initial_beach.f90 DG_initial.f90
+	@make executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_beach.dat .
+	@cp $(DATDIR)/Parameters_beach.dat Parameters.dat
+
+freebasin: maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp DG_limiter_KuSV.F90 DG_limiter.F90
+	@cp MISC_bathy_etopo.f90 MISC_bathy.f90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_strong_SWE.F90 DG_flux.F90
+	@cp DG_initial_freebasin.f90 DG_initial.f90
+	@make executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_freebasin.dat .
+	@cp $(DATDIR)/Parameters_freebasin.dat Parameters.dat
+
+shockquad: maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@cp MISC_bathy_etopo.f90 MISC_bathy.f90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_initial_riemannproblem.f90 DG_initial.f90
+	@make executable
+	@cp $(DATDIR)/dg_quad.ftf .
+	@cp $(DATDIR)/Triang_channel.dat .
+	@cp $(DATDIR)/Parameters_shockquad.dat Parameters.dat
+	@cp $(DATDIR)/gausspoints/gausspoints04.dat .
+
+shocknone: maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@cp MISC_bathy_etopo.f90 MISC_bathy.f90
+	@cp MISC_diag_mesh_efficiency.F90 MISC_diag.F90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_initial_riemannproblem.f90 DG_initial.f90
+	@make executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_channel.dat .
+	@cp $(DATDIR)/Parameters_shocklinear.dat Parameters.dat
+	@cp $(DATDIR)/gausspoints/gausspoints02.dat .
+
+
+shockshu: maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp DG_limiter_shu.F90 DG_limiter.F90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_initial_riemannproblem.f90 DG_initial.f90
+	@make executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_channel.dat .
+	@cp $(DATDIR)/Parameters_shocklinear.dat Parameters.dat
+	@cp $(DATDIR)/gausspoints/gausspoints02.dat .
+
+shockgiraldo: maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp DG_limiter_giraldo.F90 DG_limiter.F90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_initial_riemannproblem.f90 DG_initial.f90
+	@make executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_channel.dat .
+	@cp $(DATDIR)/Parameters_shocklinear.dat Parameters.dat
+	@cp $(DATDIR)/gausspoints/gausspoints02.dat .
+
+shockdry: maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp DG_limiter_KuSV.F90 DG_limiter.F90
+	@cp MISC_bathy_etopo.f90 MISC_bathy.f90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_weak.F90 DG_flux.F90
+	@cp DG_initial_riemannproblem.f90 DG_initial.f90
+	@make executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_channel.dat .
+	@cp $(DATDIR)/Parameters_shockdry.dat ./Parameters.dat
+
+wellbalanced: maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp MISC_bathy_etopo.f90 MISC_bathy.f90
+	@cp DG_limiter_KuSV.F90 DG_limiter.F90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_initial_WB.f90 DG_initial.f90
+	@$(MAKE) executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_square30.dat .
+	@cp $(DATDIR)/Parameters_WB_exp.dat Parameters.dat
+
+wind: maincopy
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@cp MISC_bathy_etopo.f90 MISC_bathy.f90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_error_vort.f90 DG_errorestimate.f90
+	@cp DG_initial_wind.f90 DG_initial.f90
+	@$(MAKE) executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_square30.dat .
+	@cp $(DATDIR)/Parameters_wind.dat Parameters.dat
+
+hump: maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@cp MISC_bathy_etopo.f90 MISC_bathy.f90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_initial_hump.f90 DG_initial.f90
+	@$(MAKE) executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_2by2_period_fine.dat .
+	@cp $(DATDIR)/Parameters_hump.dat ./Parameters.dat
+
+vortex: maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_full.f90 DG_cfl.f90
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@cp MISC_bathy_etopo.f90 MISC_bathy.f90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp MISC_diag_mesh_efficiency.F90 MISC_diag.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+# 	@cp DG_error_center_vortex.f90 DG_errorestimate.f90
+# 	@cp DG_error_center-band.f90 DG_errorestimate.f90
+# 	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_flux_weak.F90 DG_flux.F90
+	@cp DG_initial_vortex.f90 DG_initial.f90
+	@$(MAKE) executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_4by2_period_fine.dat .
+	@cp $(DATDIR)/Parameters_vortex_timeconst.dat .
+	@cp $(DATDIR)/Parameters_vortex_timeadapt.dat .
+
+runup_limBJSV: maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp DG_limiter_BJSV.F90 DG_limiter.F90
+	@cp MISC_bathy_etopo.f90 MISC_bathy.f90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_weak_SWE.F90 DG_flux.F90
+	@cp DG_initial_runup.f90 DG_initial.f90
+	@$(MAKE) executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_runup_period.dat .
+	@cp $(DATDIR)/Parameters_runup.dat Parameters.dat
+	@cp $(DATDIR)/runup_data.dat .
+
+runup_limKuSV: maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp DG_limiter_KuSV.F90 DG_limiter.F90
+	@cp MISC_bathy_etopo.f90 MISC_bathy.f90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_weak_SWE.F90 DG_flux.F90
+	@cp DG_initial_runup.f90 DG_initial.f90
+	@$(MAKE) executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_runup_period.dat .
+	@cp $(DATDIR)/Parameters_runup.dat Parameters.dat
+	@cp $(DATDIR)/runup_data.dat .
+
+oscilllake: maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_full.f90 DG_cfl.f90
+	@cp DG_limiter_KuSV.F90 DG_limiter.F90
+	@cp MISC_bathy_etopo.f90 MISC_bathy.f90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_weak_SWE.F90 DG_flux.F90
+	@cp DG_initial_oscilllake.f90 DG_initial.f90
+	@make executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_oscilllake.dat .
+	@cp $(DATDIR)/Parameters_oscilllake_timeconst.dat .
+	@cp $(DATDIR)/Parameters_oscilllake_timeadapt.dat .
+
+okushiri: maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp DG_limiter_KuSV.F90 DG_limiter.F90
+	@cp MISC_bathy_etopo.f90 MISC_bathy.f90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_weak_SWE.F90 DG_flux.F90
+	@cp DG_initial_okushiri.f90 DG_initial.f90
+	@cp DG_boundary_okushiri.F90 DG_boundary.F90
+	@cp MISC_diag_gauges.F90 MISC_diag.F90
+	@make executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_okushiri.dat .
+	@cp $(DATDIR)/Parameters_okushiri.dat .
+	@cp $(DATDIR)/MonaiValley_Bathymetry.dat .
+	@cp $(DATDIR)/MonaiValley_InputWave.dat .
+	@cp $(DATDIR)/gaugedata_okushiri.dat ./gaugedata.dat
+
+
+conicalisland-bc: maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp DG_limiter_KuSV.F90 DG_limiter.F90
+	@cp MISC_bathy_etopo.f90 MISC_bathy.f90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_weak_SWE.F90 DG_flux.F90
+	@cp DG_initial_conicalisland-bc.f90 DG_initial.f90
+	@cp DG_boundary_conicalisland.F90 DG_boundary.F90
+	@cp MISC_diag_gauges.F90 MISC_diag.F90
+	@make executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_conicalisland-bc.dat ./Triang_conicalisland.dat
+	@cp $(DATDIR)/Parameters_conicalisland_A.dat .
+	@cp $(DATDIR)/gaugedata_conicalisland-a.dat ./gaugedata.dat
+
+conicalisland-ic: maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+	@cp DG_limiter_KuSV.F90 DG_limiter.F90
+	@cp MISC_bathy_etopo.f90 MISC_bathy.f90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_weak_SWE.F90 DG_flux.F90
+	@cp DG_initial_conicalisland-ic.f90 DG_initial.f90
+	@cp DG_boundary_conicalisland.F90 DG_boundary.F90
+	@cp MISC_diag_gauges.F90 MISC_diag.F90
+	@make executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_conicalisland-ic.dat ./Triang_conicalisland.dat
+	@cp $(DATDIR)/Parameters_conicalisland_A.dat .
+	@cp $(DATDIR)/gaugedata_conicalisland-a.dat ./gaugedata.dat
+
+oceanstest: maincopy
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_full.f90 DG_cfl.f90
+	@cp MISC_bathy_etopo.f90 MISC_bathy.f90
+	@cp DG_limiter_KuSV.F90 DG_limiter.F90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_strong.F90 DG_flux.F90
+	@cp DG_initial_dambreak.f90 DG_initial.f90
+	@make executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_dambreak.dat .
+	@cp $(DATDIR)/Parameters_dambreak.dat Parameters.dat
+
+#----------------------------------------------------------------#
+# test cases for linear advection equation                       #
+#----------------------------------------------------------------#
+
+linAdv-sines: maincopy
+	@cp DG_flux_weak.F90 DG_flux.F90
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+# 	@cp DG_time_rosenbrock.F90 DG_timestepping.F90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp $(SRCDIR)/linAdvect/DG_equation.F90 DG_equation.F90
+	@cp $(SRCDIR)/linAdvect/DG_cfl.f90 DG_cfl.f90
+	@cp $(SRCDIR)/linAdvect/DG_boundary.F90 DG_boundary.F90
+	@cp $(SRCDIR)/linAdvect/DG_RS_upwind.F90 DG_riemann_solver.F90
+	@cp $(SRCDIR)/linAdvect/DG_initial_sines.f90 DG_initial.f90
+	@cp $(SRCDIR)/linAdvect/IO_equation.f90 IO_equation.f90
+	@$(MAKE) executable
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_1by1_period_fine.dat .
+	@cp $(DATDIR)/linAdvect/Parameters_sines_rk22.dat .
+
+-include $(MAINDIR)/compile/Makefiles/Makefile.local
+
+python:
+	@cp $(MAINDIR)/src/python/cs_viz.py .
+	@ipython cs_viz.py
+
+params:
+	@cp $(MAINDIR)/src/python/param.py .
+	@ipython param.py
+	@chmod 700 pytest
+
+timeparams:
+	@cp $(MAINDIR)/src/python/param_time.py .
+	@ipython param_time.py
+	@chmod 700 pytest
+
+plot:
+	@cp $(MAINDIR)/src/python/plot.py .
+	@ipython plot.py
+
+constudy:
+	@cp $(MAINDIR)/src/python/cvplus_viz.py .
+	@ipython cvplus_viz.py

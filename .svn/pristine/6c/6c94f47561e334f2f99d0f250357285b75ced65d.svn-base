@@ -1,0 +1,30 @@
+!-----------------------------------------------------------------
+! this file contains input data for the initial field
+! in the tracer advection experiment
+! again, keywords control the input data
+!
+! j. behrens, 12/97
+!-----------------------------------------------------------------
+# on of two main keywords must appear at the beginning
+# CIRCLES_INPUT or FILES_INPUT
+CIRCLES_INPUT
+# the CIRCLES_INPUT keywords follow
+# give the number of circles
+NUMBER_OF_CIRCLES
+1
+# for each circle give the coordinates and the concentration
+CIRCLE_COORDINATES
+17.3
+10.5
+CIRCLE_DIAMETER
+2.1
+CIRCLE_CONCENTRATION
+1.
+!-----------------------------------------------------------------
+# for the FILES_INPUT there are (not yet implemented) some
+# keywords:
+# INPUT_FILE_NAME, X_POINT_NUMBER, Y_POINT_NUMBER, NUMBER_OF_WATERMARKS,
+# WATERMARK_LEVEL, WATERMARK_CONCENTRATION
+!-----------------------------------------------------------------
+! and this is the end of the file
+!-----------------------------------------------------------------

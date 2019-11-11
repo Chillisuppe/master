@@ -1,0 +1,94 @@
+#---------------------------------------------------------#
+# Additional testcases that have been used in/for or on
+# the journey to
+#
+# Beisiegel (2014): "High-Order Adaptive Discontinuous
+# Galerkin Inundation Modeling", PhD Thesis,
+# University of Hamburg.
+#---------------------------------------------------------#
+
+default:
+	@cp DG_equation_swesrcbathy.F90 DG_equation.F90
+	@cp DG_cfl_simple.f90 DG_cfl.f90
+# 	@cp DG_limiter_nodal.F90 DG_limiter.F90
+	@cp DG_limiter_KuSV.F90 DG_limiter.F90
+	@cp MISC_bathy_ncfile.f90 MISC_bathy.f90
+	@cp DG_RS_rusanov.F90 DG_riemann_solver.F90
+	@cp DG_time_rungekutta.F90 DG_timestepping.F90
+	@cp DG_flux_strong.F90 DG_flux.F90
+
+#---------------------------------------------------------#
+#  Wellbalancing (WB) Testcases
+#---------------------------------------------------------#
+
+WB_flatbed: maincopy
+	@make default
+	@cp DG_initial_WB.f90 DG_initial.f90
+	@make executable
+	@make datacopy
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_square1.dat .
+	@cp $(DATDIR)/Parameters_WB_flatbed.dat Parameters.dat
+
+WB_island: maincopy
+	@make default
+	@cp DG_initial_WB.f90 DG_initial.f90
+	@make executable
+	@make datacopy
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_square1.dat .
+	@cp $(DATDIR)/Parameters_WB_island.dat Parameters.dat
+
+WB_perturb: maincopy
+	@make default
+	@cp DG_initial_WB.f90 DG_initial.f90
+	@make executable
+	@make datacopy
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_square1.dat .
+	@cp $(DATDIR)/Parameters_WB_perturb.dat Parameters.dat
+
+#---------------------------------------------------------#
+# Balzano (~ish) Tests, sloping beach w wetting & drying
+#---------------------------------------------------------#
+
+beach_reservoir: maincopy
+	@make default
+	@cp DG_initial_beach_reservoir.f90 DG_initial.f90
+	@make executable
+	@make datacopy
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_beach2.dat .
+	@cp $(DATDIR)/Parameters_beach2.dat Parameters.dat
+
+beachboutest: maincopy
+	@make default
+	@cp DG_initial_WB.f90 DG_initial.f90
+	@make executable
+	@make datacopy
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_beach.dat .
+	@cp $(DATDIR)/Parameters_beachbou.dat Parameters.dat
+
+#---------------------------------------------------------#
+# Sloshing basin aka linear standing wave w/o limiting
+#---------------------------------------------------------#
+
+linstandingwave_quad: maincopy
+	@make default
+	@cp DG_initial_linstandingwave.f90 DG_initial.f90
+	@make executable
+	@make datacopy
+	@cp $(DATDIR)/dg_quad.ftf .
+	@cp $(DATDIR)/Triang_square1.dat .
+	@cp $(DATDIR)/Parameters_linstandingwave_quad.dat Parameters.dat
+
+linstandingwave_linear: maincopy
+	@make default
+	@cp DG_limiter_none.F90 DG_limiter.F90
+	@cp DG_initial_linstandingwave.f90 DG_initial.f90
+	@make executable
+	@make datacopy
+	@cp $(DATDIR)/dg_linear.ftf .
+	@cp $(DATDIR)/Triang_square1.dat .
+	@cp $(DATDIR)/Parameters_linstandingwave_lin.dat Parameters.dat
