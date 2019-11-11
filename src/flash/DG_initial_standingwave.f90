@@ -248,6 +248,7 @@ MODULE DG_initial
 
 !--- initialize constants
 !--- we neglect y direction. eta(x,y_0,t)=eta(x,y_1,t) for all y_0 and y_1
+!--- das klappt noch nicht
     r_x  = r_coo(1)
     r_w = 2.0_GRID_SR * GRID_PI/p_testparam%treal(2)%p_value(1) * &
       SQRT(0.5_GRID_SR * GRID_GRAV * p_testparam%treal(2)%p_value(1)/GRID_PI * &
