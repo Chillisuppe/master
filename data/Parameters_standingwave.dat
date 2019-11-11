@@ -82,8 +82,8 @@ AMPLITUDE
 # wavelength                                      [real]
 WAVELENGTH
 20.0
-# bathymetric depth (uniform) of the basin        [real]
-BATHY_PARAM_DEPTH
+# bathymetric of the basin (constant)             [real]
+BATHY_DEPTH
 -3.0
 #-----------------------------------------------------------
 # END OF FILE
